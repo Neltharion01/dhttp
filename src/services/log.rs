@@ -18,8 +18,9 @@ impl DefaultLogger {
         let year = tm_year + 1900;
         let date = format_args!("{tm_hour:02}:{tm_min:02}:{tm_sec:02} {tm_mday:02}-{tm_mon:02}-{year}");
 
-        // TODO +user agent
-        let agent = escape::control_sequences(req.get_header("User-Agent").unwrap_or("UnknownAgent"));
+        // User-Agents are long, print only first segment
+        let agent = req.get_header("User-Agent").and_then(|a| a.split(' ').next()).unwrap_or("-");
+        let agent = escape::control_sequences(agent);
         format!("[{date}] {addr} {agent} {method} {route} -> {code} {desc}")
     }
 }
