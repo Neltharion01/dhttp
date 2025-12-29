@@ -18,6 +18,9 @@ socket2 = "0.6"
 [dependencies.chrono_lite]
 path = "../chrono_lite"
 
+[dependencies.percent_encoding_lite]
+path = "../percent_encoding_lite"
+
 [dependencies.tokio]
 version = "1.48"
 features = ["rt-multi-thread", "fs", "net", "io-util", "time", "signal"]
