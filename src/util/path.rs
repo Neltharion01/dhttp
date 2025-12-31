@@ -13,43 +13,14 @@ use percent_encoding_lite::Bitmask;
 use crate::core::{HttpError, HttpErrorType};
 use crate::reqres::StatusCode;
 
-// ================================================================================
-
-// Why does Windows sanitize_path require valid utf-8?
-// Sorry. I'm bad at explaining things, but here is the story:
-
-// To handle non-unicode paths on windows, we have to pass the WTF-8 string into urlencode,
-// and decode WTF-8 back into UTF-16 to pass it into NT api
-// Unfortunately, std treats such string (OsStr) as opaque api, and function to construct it is unsafe
-// I don't want to mess with that
-// i.e. read_dir() -> PathBuf -> OsStr -> WTF-8 &[u8] -> urlencode() -> &str
-// &str -> urldecode() -> WTF-8 &[u8] -> OsStr -> Path -> File::open
-// &[u8] -> OsStr step is flawed, std does not guarantee that internal representation will always be
-// WTF-8, BUT it will because &str has to be compatible with OsStr
-
-// Alternatively, we can add fs::read_dir that returns our OsStr, but it is incompatible with PathBuf
-// And adding FS apis into a web framework already starts looking weird, even if just for security
-
-// We can go the .encode_wide() roundtrip to utf-16 from wtf-8 from utf-16 but it just looks...
-// ...like any other insanely stupid and ugly hack when people try to workaround Rust's incompleteness
-// I'd better leave it alone until someone requests supporting non-unicode paths here
-
-// Hopefully I'll fix that flaw if I ever make a no_std async crate
-
-// ================================================================================
-
-// RESOLVE_BENEATH is amazing, but keeping fd instead of opening each time will make a very very
-// terrible and confusing thing: moving the host directory out will not stop it from being hosted!!!
-// sooo, we have to open it each time
-// also since NT doesn't have resolve_beneath it is somewhat useless to call Dir::open on it
-// even google safeopen (and Go's stdlib variant) just calls NtCreateFile in loop which does not
-// protect from possible directory traversal (oh hell)
-
 /// URL-decodes and converts request route into a relative path and checks its safety.
 ///
 /// See [`DangerousPathError`] for details of these checks
 pub fn sanitize(route: &str) -> Result<PathBuf, DangerousPathError> {
     let decoded = percent_encoding_lite::decode(route);
+    // Why from_utf8? Long story short, we can't SAFELY construct an OsStr from WTF-8 bytes
+    // We for sure can roundtrip through OsString::from_wide... only to encode it into WTF-8 again
+    // WTF, std?
     #[cfg(windows)]
     return sanitize_win(str::from_utf8(&decoded).map_err(|_| DangerousPathError::InvalidCharacters)?);
     #[cfg(unix)]
