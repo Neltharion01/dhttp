@@ -16,7 +16,8 @@ impl DefaultLogger {
 
         let Tm { tm_mday, tm_mon, tm_year, tm_hour, tm_min, tm_sec, .. } = localtime(time()).expect("date out of range");
         let year = tm_year + 1900;
-        let date = format_args!("{tm_hour:02}:{tm_min:02}:{tm_sec:02} {tm_mday:02}-{tm_mon:02}-{year}");
+        let month = tm_mon + 1;
+        let date = format_args!("{tm_hour:02}:{tm_min:02}:{tm_sec:02} {tm_mday:02}-{month:02}-{year}");
 
         // User-Agents are long, print only first segment
         let agent = req.get_header("User-Agent").and_then(|a| a.split(' ').next()).unwrap_or("-");
