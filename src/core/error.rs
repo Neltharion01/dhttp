@@ -9,15 +9,17 @@ use crate::reqres::StatusCode;
 /// Returned from [`HttpError::error_type`]
 #[derive(Debug, Clone, Copy)]
 pub enum HttpErrorType {
-    /// Terminates the connection (network I/O error)
+    /// Terminates the connection (examples: network I/O error)
     Fatal,
-    /// Blank error code (not found, permission denied)
+    /// Status code (examples: 404 Not found, 403 Forbidden)
     Hidden,
-    /// Detailed error description (could not parse json, wrong file type, etc)
+    /// Error with detailed description (could not parse json, wrong file type, etc)
     User,
 }
 
 /// Error trait for any service error
+/// # Example implementation
+/// `impl HttpError for MyError {}`
 pub trait HttpError: Error + Send + 'static {
     /// Name of this error (type name by default)
     fn name(&self) -> &'static str {
