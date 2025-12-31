@@ -41,27 +41,11 @@ use crate::reqres::StatusCode;
 // RESOLVE_BENEATH is amazing, but keeping fd instead of opening each time will make a very very
 // terrible and confusing thing: moving the host directory out will not stop it from being hosted!!!
 // sooo, we have to open it each time
-// not a huge deal anyways, just a very important thing to remember
 // also since NT doesn't have resolve_beneath it is somewhat useless to call Dir::open on it
 // even google safeopen (and Go's stdlib variant) just calls NtCreateFile in loop which does not
 // protect from possible directory traversal (oh hell)
-// safety measures are good, but a proper sandbox is your best friend
-// (maybe in future i'll add LSM dhttp module & crate which allows something similar to unveil(),
-// should be more than enough for protection)
 
-// Since for now the only thing that produces PathBuf is fs::read_dir and that consumes it is File::open,
-// we can move theirs api into our own crate for that, while being hella overengineered this will
-// solve our problem completely
-
-// ON THE OTHER HAND we can ignore its existense and simplify dhttp APIs SOMEHOW
-// and that should be hella smart since windows PathBuf conversion is, well, fallible
-// We can use OsStr::to_utf8_lossy, while API-wise this is the most convenient solution,
-// in reality it will silently hide errors, but oh hell who cares
-
-// Anyways, only Linux support is our no. 1 priority
-
-/// Converts request route into a relative path and checks its safety.
-/// Automatically performs url decoding - please keep in mind if you enforce additional checks
+/// URL-decodes and converts request route into a relative path and checks its safety.
 ///
 /// See [`DangerousPathError`] for details of these checks
 pub fn sanitize(route: &str) -> Result<PathBuf, DangerousPathError> {
@@ -70,11 +54,15 @@ pub fn sanitize(route: &str) -> Result<PathBuf, DangerousPathError> {
     return sanitize_win(str::from_utf8(&decoded).map_err(|_| DangerousPathError::InvalidCharacters)?);
     #[cfg(unix)]
     return sanitize_unix(&decoded);
+    #[cfg(target_os = "cygwin")] {
+        not_implemented("This function assumes unix paths on unix targets. Cygwin uses windows paths and so this code has to be refactored to support it");
+    }
     #[cfg(not(any(windows, unix)))]
     not_implemented
 }
 
-#[cfg(unix)]
+// unfortunately we need separate functions for windows/unix because windows one uses &str
+#[cfg(any(unix, test))]
 fn sanitize_unix(route: &[u8]) -> Result<PathBuf, DangerousPathError> {
     if route.contains(&0) { return Err(DangerousPathError::InvalidCharacters); }
 
@@ -89,35 +77,18 @@ fn sanitize_unix(route: &[u8]) -> Result<PathBuf, DangerousPathError> {
     Ok(out)
 }
 
-// TODO: merge two functions once I validate the windows version
-#[cfg(windows)]
+#[cfg(any(windows, test))]
 fn sanitize_win(route: &str) -> Result<PathBuf, DangerousPathError> {
     if route.contains(|c| c < ' ') { return Err(DangerousPathError::InvalidCharacters); }
-    // also / is invalid but we are filtering path not filenames
-    // but \ is invalid because HTTP routes are separated by /
-    if route.contains([':', '\\']) { return Err(DangerousPathError::InvalidCharacters); }
+    // windows invalid characters except path separators '/' '\\'
+    // out of all these ':' is most important because it rejects drive letters
+    const INVALID_CHARS: &[char] = &['<', '>', ':', '"', '|', '?', '*'];
+    if route.contains(INVALID_CHARS) { return Err(DangerousPathError::InvalidCharacters); }
 
     let mut out = PathBuf::new();
-    for segment in route.split('/') {
+    for segment in route.split(['/', '\\']) {
         if segment.is_empty() || segment == "." { continue; }
         if segment == ".." { return Err(DangerousPathError::DangerousPath); }
-        // Findings:
-        // nul/123 never exists
-        // nul/ is valid as well as nul.txt
-        // nultxt is a file
-        // any of these listed are existing
-        // this should be checked for any lower/upper case!!!
-        // + technically we 1) need only last non empty seg, 2) check if it equals one of these AND if it starts with nul. and etc
-        // invalid characters (except '\' ':') do not cause any harm BUT ux-wise this error should be bad request instead of very funny localized windows error
-        if segment.starts_with("CON") // also CONIN$ CONOUT$
-        || segment.starts_with("PRN")
-        || segment.starts_with("AUX")
-        || segment.starts_with("NUL")
-        || segment.starts_with("COM") // 1-9 ¹²³
-        || segment.starts_with("LPT") // 1-9 ¹²³
-        {
-            return Err(DangerousPathError::DangerousPath);
-        }
         out.push(segment);
     }
 
@@ -125,12 +96,12 @@ fn sanitize_win(route: &str) -> Result<PathBuf, DangerousPathError> {
     Ok(out)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum DangerousPathError {
     /// Path contains dangerous segments (`..` and drive letters on Windows)
     DangerousPath,
-    /// Path was either invalid UTF-8 (only on Windows), or contained forbidden characters:
+    /// Path was either invalid UTF-8 (only on Windows), file name or contained forbidden characters:
     /// - `\0` on unix
     /// - 0-31 and `<>:"/\|?*` on Windows
     InvalidCharacters,
@@ -161,4 +132,37 @@ pub fn encode(path: &Path) -> String {
     not_implemented
 }
 
-// TODO: some unit tests?
+// TODO: test C:file on actix and " .." on dhttp
+#[cfg(test)]
+mod tests {
+    use super::{sanitize_win, sanitize_unix, DangerousPathError};
+    use DangerousPathError::*;
+    #[test]
+    fn win() {
+        assert_eq!(sanitize_win("/.."), Err(DangerousPath));
+        assert_eq!(sanitize_win("/\\..\\"), Err(DangerousPath));
+        assert_eq!(sanitize_win("Dir\\.."), Err(DangerousPath));
+        assert_eq!(sanitize_win("/C:/Windows"), Err(InvalidCharacters));
+        assert_eq!(sanitize_win("/C:\\Windows"), Err(InvalidCharacters));
+        assert_eq!(sanitize_win("C:file.txt"), Err(InvalidCharacters));
+        assert_eq!(sanitize_win("/\\\\?\\"), Err(InvalidCharacters));
+        assert_eq!(sanitize_win("/\0"), Err(InvalidCharacters));
+        assert!(sanitize_win("/status.json").is_ok());
+        assert!(sanitize_win("/files/examples/fileserver.rs").is_ok());
+        assert!(sanitize_win("/F1SHMSOaYAA1M2G.jpeg").is_ok());
+    }
+    #[test]
+    fn unix() {
+        assert_eq!(sanitize_unix(b"/.."), Err(DangerousPath));
+        assert_eq!(sanitize_unix(b"../"), Err(DangerousPath));
+        assert_eq!(sanitize_unix(b".."), Err(DangerousPath));
+        assert_eq!(sanitize_unix(b"/dir/.."), Err(DangerousPath));
+        assert_eq!(sanitize_unix(b"/\0"), Err(InvalidCharacters));
+        assert_eq!(sanitize_unix(b"/nulls\0instead\0of\0spaces"), Err(InvalidCharacters));
+        assert!(sanitize_unix(b"<>:\"/\\|?*").is_ok());
+        assert!(sanitize_unix(b"/just/a/path").is_ok());
+        assert!(sanitize_unix(b"/dev/sda").is_ok());
+        assert!(sanitize_unix(b"\\..\\This is a filename").is_ok());
+        assert!(sanitize_unix(b"/C:/Windows").is_ok());
+    }
+}
