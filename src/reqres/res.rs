@@ -1,16 +1,8 @@
 //! HTTP response and its constructors
 
-use std::io::SeekFrom;
-use std::path::Path;
-
-use tokio::io::AsyncSeekExt;
-use tokio::fs::File;
-
 use percent_encoding_lite::{is_encoded, encode, Bitmask};
 
-use crate::core::HttpResult;
-use crate::reqres::{HttpRequest, HttpHeader, HttpBody, StatusCode};
-use crate::util::httpdate;
+use crate::reqres::{HttpHeader, HttpBody, StatusCode};
 
 /// Your response
 #[derive(Debug)]
@@ -85,65 +77,4 @@ pub fn redirect(dest: impl Into<String>) -> HttpResponse {
     }
 }
 
-// TODO set content type for popular exts (nginx as reference)
-/// Responds with a file
-pub async fn file(req: &HttpRequest, name: &Path) -> HttpResult {
-    let mut file = File::open(name).await?;
-    let metadata = file.metadata().await?;
-    let mut len = metadata.len();
-
-    // becomes PARTIAL_CONTENT if range was served
-    let mut code = StatusCode::OK;
-
-    // Last-Modified
-    let mut headers = vec![];
-    if let Ok(time) = metadata.modified() { // fails if field not supported
-        if let Some(s) = httpdate::from_systime(time) { // fails on overflow
-            headers.push(HttpHeader { name: "Last-Modified".to_string(), value: s });
-        }
-    }
-
-    // Date
-    if let Some(date) = httpdate::now() {
-        headers.push(HttpHeader { name: "Date".to_string(), value: date });
-    }
-
-    // Advertise byte ranges support
-    headers.push(HttpHeader {
-        name: "Accept-Ranges".to_string(),
-        value: "bytes".to_string(),
-    });
-
-    // Parse byte range request
-    if let Some(range) = req.get_header("Range") {
-        if let Some((start, mut end)) = parse_range(range) && start <= len && start <= end {
-            end = end.min(len);
-
-            headers.push(HttpHeader {
-                name: "Content-Range".to_string(),
-                value: format!("bytes {start}-{end}/{len}"),
-            });
-
-            file.seek(SeekFrom::Start(start)).await?;
-            len = end - start + 1;
-            code = StatusCode::PARTIAL_CONTENT;
-        } else {
-            // we have to set Content-Range in case of error too but errors can't have headers in dhttp
-            return Err(StatusCode::RANGE_NOT_SATISFIABLE.into());
-        }
-    }
-
-    Ok(HttpResponse {
-        code,
-        headers,
-        body: HttpBody::File { file, len },
-        content_type: "".to_string(),
-    })
-}
-
-fn parse_range(range: &str) -> Option<(u64, u64)> {
-    let (start, end) = range.strip_prefix("bytes=")?.split_once('-')?;
-    let start = if start.is_empty() { 0 } else { start.parse().ok()? };
-    let end = if end.is_empty() { u64::MAX } else { end.parse().ok()? };
-    Some((start, end))
-}
+pub use super::file::file;

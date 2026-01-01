@@ -10,6 +10,8 @@ pub use body::HttpBody;
 pub mod res;
 pub use res::HttpResponse;
 
+mod file;
+
 use std::fmt;
 
 /// Header key/value
