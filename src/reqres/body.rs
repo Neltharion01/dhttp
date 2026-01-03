@@ -33,6 +33,7 @@ impl<T: HttpUpgrade> HttpUpgradeRaw for T {
 }
 
 /// Body of the response
+#[non_exhaustive]
 pub enum HttpBody {
     /// In-memory bytes
     Bytes(Vec<u8>),

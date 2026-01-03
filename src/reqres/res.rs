@@ -3,9 +3,11 @@
 use percent_encoding_lite::{is_encoded, encode, Bitmask};
 
 use crate::reqres::{HttpHeader, HttpBody, StatusCode};
+use crate::reqres::sse::HttpSse;
 
 /// Your response
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct HttpResponse {
     pub code: StatusCode,
     pub headers: Vec<HttpHeader>,
@@ -75,6 +77,10 @@ pub fn redirect(dest: impl Into<String>) -> HttpResponse {
         body: format!("<a href=\"{dest}\">Click here if you weren't redirected</a>\n").into(),
         content_type: "text/html; charset=utf-8".to_string(),
     }
+}
+
+pub fn sse(handler: impl HttpSse) -> HttpResponse {
+    HttpResponse::with_type("text/event-stream", HttpBody::Upgrade(Box::new(handler)))
 }
 
 pub use super::file::file;

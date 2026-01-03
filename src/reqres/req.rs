@@ -75,6 +75,7 @@ impl fmt::Display for HttpMethod {
 
 /// Request from client to handle
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct HttpRequest {
     pub method: HttpMethod,
     pub route: String,

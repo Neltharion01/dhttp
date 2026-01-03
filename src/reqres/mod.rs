@@ -10,6 +10,8 @@ pub use body::{HttpBody, HttpUpgrade};
 pub mod res;
 pub use res::HttpResponse;
 
+pub mod sse;
+
 mod file;
 
 use std::fmt;
