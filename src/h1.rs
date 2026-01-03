@@ -86,19 +86,32 @@ pub(crate) async fn send(req: &HttpRequest, res: HttpResponse, conn: &mut dyn Ht
         write!(&mut buf, "Content-Type: {}\r\n", &res.content_type).unwrap();
     }
 
-    // Don't send body on head requests
-    if req.method != HttpMethod::Head { return Ok(()); }
+    write!(&mut buf, "Content-Length: ").unwrap();
+    match &res.body {
+        HttpBody::Bytes(bytes) => write!(&mut buf, "{}", bytes.len()).unwrap(),
+        HttpBody::File { len, .. } => write!(&mut buf, "{}", len).unwrap(),
+        HttpBody::Upgrade(_) => {},
+    };
+    write!(&mut buf, "\r\n\r\n").unwrap();
 
-    // Send last Content-Length header and the body
-    if let HttpBody::Bytes(bytes) = res.body {
-        write!(&mut buf, "Content-Length: {}\r\n\r\n", bytes.len()).unwrap();
-        conn.write_all(&bytes).await?;
-    } else if let HttpBody::File { file, len } = res.body {
-        write!(&mut buf, "Content-Length: {}\r\n\r\n", len).unwrap();
-        tokio::io::copy(&mut file.take(len), conn).await?;
-    } else if let HttpBody::Upgrade(mut handler) = res.body {
-        handler.upgrade_raw(conn).await?;
-        conn.shutdown().await?;
+    // Send headers
+    conn.write_all(buf.as_bytes()).await?;
+
+    // Don't send body on head requests
+    if req.method == HttpMethod::Head { return Ok(()); }
+
+    // Now, handle the body
+    match res.body {
+        HttpBody::Bytes(bytes) => {
+            conn.write_all(&bytes).await?;
+        }
+        HttpBody::File { file, len } => {
+            tokio::io::copy(&mut file.take(len), conn).await?;
+        }
+        HttpBody::Upgrade(mut handler) => {
+            handler.upgrade_raw(conn).await?;
+            conn.shutdown().await?;
+        }
     }
 
     Ok(())
