@@ -20,6 +20,7 @@ impl StatusCode {
             200 => "OK",
             206 => "Partial content",
             301 => "Moved permanently",
+            304 => "Not modified",
             400 => "Bad request",
             401 => "Unauthorized",
             403 => "Forbidden",
@@ -46,6 +47,8 @@ impl StatusCode {
 
     /// 301
     pub const MOVED_PERMANENTLY: StatusCode = StatusCode(301);
+    /// 304
+    pub const NOT_MODIFIED: StatusCode = StatusCode(304);
 
     // 4xx
 

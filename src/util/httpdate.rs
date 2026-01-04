@@ -13,7 +13,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use chrono_lite::{time_t, Tm, gmtime, time};
+use chrono_lite::{time_t, Tm, gmtime, timegm, time};
 
 const WEEKDAYS: &[&str] = &["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS: &[&str] = &["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -45,11 +45,60 @@ pub fn now() -> Option<String> {
     Some(httpdate(tm))
 }
 
+/// Parses an HTTP date
+pub fn parse(mut date: &str) -> Option<time_t> {
+    // It looks terrible, I know
+    // Could be better if I had sscanf in Rust
+    date = date.get(5..)?; // "Sat, "
+
+    let mdaylen = if date.chars().nth(1)? == ' ' { 1 } else { 2 };
+    let tm_mday = date.get(0..mdaylen)?.parse().ok()?; // "03"
+    date = date.get(mdaylen+1..)?; // "03 "
+
+    let month = date.get(0..3)?; // "Jan"
+    let month = MONTHS.iter().position(|&i| i == month)?;
+    date = date.get(4..)?; // "Jan "
+    let year: i32 = date.get(0..4)?.parse().ok()?; // "2026"
+    date = date.get(5..)?; // "2026 "
+    let tm_hour = date.get(0..2)?.parse().ok()?; // "17"
+    date = date.get(3..)?; // "17:"
+    let tm_min = date.get(0..2)?.parse().ok()?; // "49"
+    date = date.get(3..)?; // "49:"
+    let tm_sec = date.get(0..2)?.parse().ok()?; // "29"
+    date = date.get(3..)?; // "29 "
+    if date != "GMT" { return None; } // "GMT"
+
+    let tm = Tm {
+        tm_year: year - 1900,
+        tm_mon: month as i32,
+        tm_mday,
+        tm_hour,
+        tm_min,
+        tm_sec,
+        ..Default::default()
+    };
+    timegm(tm)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
+
     #[test]
     fn test_httpdate() {
         assert_eq!("Wed, 26 Feb 2025 22:10:59 GMT", &httpdate(gmtime(1740607859).unwrap()));
+    }
+
+    #[test]
+    fn test_parse() {
+        let time = parse("Sat, 03 Jan 2026 17:49:29 GMT").unwrap();
+        assert_eq!(1767462569, time.duration_since(UNIX_EPOCH).unwrap().as_secs());
+        let time = parse("Sat, 3 Jan 2026 23:59:31 GMT").unwrap();
+        assert_eq!(1767484771, time.duration_since(UNIX_EPOCH).unwrap().as_secs());
+    }
+
+    #[test]
+    fn test_panic() {
+        assert_eq!(None, parse("🐉🐉🐉🐉🐉"));
     }
 }

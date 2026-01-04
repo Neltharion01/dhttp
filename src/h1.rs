@@ -87,11 +87,11 @@ pub(crate) async fn send(req: &HttpRequest, res: HttpResponse, conn: &mut dyn Ht
     }
 
     match &res.body {
-        HttpBody::Bytes(bytes) => write!(&mut buf, "Content-Length: {}", bytes.len()).unwrap(),
-        HttpBody::File { len, .. } => write!(&mut buf, "Content-Length: {}", len).unwrap(),
-        HttpBody::Upgrade(_) => {},
+        HttpBody::Bytes(bytes) => write!(&mut buf, "Content-Length: {}\r\n", bytes.len()).unwrap(),
+        HttpBody::File { len, .. } => write!(&mut buf, "Content-Length: {}\r\n", len).unwrap(),
+        HttpBody::Empty | HttpBody::Upgrade(_) => {},
     };
-    write!(&mut buf, "\r\n\r\n").unwrap();
+    buf.push_str("\r\n");
 
     // Send headers
     conn.write_all(buf.as_bytes()).await?;
@@ -101,6 +101,7 @@ pub(crate) async fn send(req: &HttpRequest, res: HttpResponse, conn: &mut dyn Ht
 
     // Now, handle the body
     match res.body {
+        HttpBody::Empty => {},
         HttpBody::Bytes(bytes) => {
             conn.write_all(&bytes).await?;
         }

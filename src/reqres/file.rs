@@ -3,6 +3,7 @@ use std::path::Path;
 use std::ffi::OsStr;
 use std::collections::HashMap;
 use std::sync::LazyLock;
+use std::time::UNIX_EPOCH;
 
 use tokio::io::AsyncSeekExt;
 use tokio::fs::File;
@@ -20,13 +21,15 @@ pub async fn file(req: &HttpRequest, name: &Path) -> HttpResult {
     // becomes PARTIAL_CONTENT if range was served
     let mut code = StatusCode::OK;
     let content_type = get_content_type(name.extension()).unwrap_or_default().to_string();
+    let mut headers = vec![];
+    let mut body;
 
     // Last-Modified
-    let mut headers = vec![];
-    if let Ok(time) = metadata.modified() { // fails if field not supported
-        if let Some(s) = httpdate::from_systime(time) { // fails on overflow
-            headers.push(HttpHeader { name: "Last-Modified".to_string(), value: s });
-        }
+    let time = metadata.modified().ok();
+    if let Some(value) = time // fails when field not supported
+        .and_then(httpdate::from_systime) // fails on overflow
+    {
+        headers.push(HttpHeader { name: "Last-Modified".to_string(), value });
     }
 
     // Date
@@ -59,12 +62,20 @@ pub async fn file(req: &HttpRequest, name: &Path) -> HttpResult {
         }
     }
 
-    Ok(HttpResponse {
-        code,
-        headers,
-        body: HttpBody::File { file, len },
-        content_type,
-    })
+    body = HttpBody::File { file, len };
+
+    // If-Modified-Since🐛🐛🐛
+    if let Some(time) = time
+        && let Some(time) = time.duration_since(UNIX_EPOCH).ok()
+        && let Some(if_modified_since) = req.get_header("If-Modified-Since")
+        && let Some(parsed) = httpdate::parse(if_modified_since)
+        && parsed >= time.as_secs() as i64
+    {
+        code = StatusCode::NOT_MODIFIED;
+        body = HttpBody::Empty;
+    }
+
+    Ok(HttpResponse { code, headers, body, content_type })
 }
 
 fn parse_range(range: &str) -> Option<(u64, u64)> {

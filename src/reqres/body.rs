@@ -35,6 +35,8 @@ impl<T: HttpUpgrade> HttpUpgradeRaw for T {
 /// Body of the response
 #[non_exhaustive]
 pub enum HttpBody {
+    /// No data, **does not have Content-Length**
+    Empty,
     /// In-memory bytes
     Bytes(Vec<u8>),
     /// File handle to read
@@ -46,6 +48,7 @@ pub enum HttpBody {
 impl fmt::Debug for HttpBody {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            HttpBody::Empty => fmt.write_str("HttpBody::Empty"),
             HttpBody::Bytes(v) => write!(fmt, r#"HttpBody::Bytes(b"{}")"#, escape::to_utf8(v)),
             HttpBody::File { file, len } => fmt.debug_struct("HttpBody::File").field("file", file).field("len", len).finish(),
             HttpBody::Upgrade(_) => fmt.write_str("HttpBody::Upgrade(..)"),
