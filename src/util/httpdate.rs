@@ -91,10 +91,8 @@ mod test {
 
     #[test]
     fn test_parse() {
-        let time = parse("Sat, 03 Jan 2026 17:49:29 GMT").unwrap();
-        assert_eq!(1767462569, time.duration_since(UNIX_EPOCH).unwrap().as_secs());
-        let time = parse("Sat, 3 Jan 2026 23:59:31 GMT").unwrap();
-        assert_eq!(1767484771, time.duration_since(UNIX_EPOCH).unwrap().as_secs());
+        assert_eq!(1767462569, parse("Sat, 03 Jan 2026 17:49:29 GMT").unwrap());
+        assert_eq!(1767484771, parse("Sat, 3 Jan 2026 23:59:31 GMT").unwrap());
     }
 
     #[test]
