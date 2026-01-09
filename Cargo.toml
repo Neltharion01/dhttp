@@ -17,6 +17,7 @@ socket2 = "0.6"
 
 chrono_lite = { git = "https://github.com/Neltharion01/chrono_lite" }
 percent_encoding_lite = { git = "https://github.com/Neltharion01/percent_encoding_lite" }
+blake3_lite = { path = "../blake3_lite" } # TODO publish
 
 [dependencies.tokio]
 version = "1.48"

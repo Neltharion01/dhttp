@@ -9,14 +9,13 @@ use tokio::fs;
 
 struct FileServer;
 impl HttpService for FileServer {
-    // TODO maybe switch to FilesService
     async fn request(&self, route: &str, req: &HttpRequest, _body: &mut dyn HttpRead) -> HttpResult {
         let path = path::sanitize(route)?;
 
         let metadata = fs::metadata(&path).await?;
 
         if metadata.is_dir() {
-            Ok(res::html(list_dir(route, &path).await?))
+            Ok(res::html(req, list_dir(route, &path).await?))
         } else {
             Ok(res::file(req, &path).await?)
         }
@@ -46,6 +45,7 @@ async fn list_dir(route: &str, path: &Path) -> io::Result<String> {
     let mut entries = fs::read_dir(&path).await?;
     while let Some(file) = entries.next_entry().await? {
         let path = path::encode(&file.path());
+        // TODO this is broken on windows
         let mut path = format!("/{}", path.trim_start_matches("./").trim_start_matches(".%5C"));
         let filetype = file.file_type().await?;
         if filetype.is_dir() || filetype.is_symlink() {

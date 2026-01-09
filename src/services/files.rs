@@ -28,7 +28,7 @@ impl HttpService for FilesService {
         if metadata.is_dir() {
             Err(StatusCode::NOT_FOUND.into())
         } else {
-            Ok(res::file(req, &path).await?)
+            res::file(req, &path).await
         }
     }
 

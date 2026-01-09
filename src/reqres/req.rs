@@ -99,6 +99,12 @@ impl HttpRequest {
         }
         header
     }
+
+    /// Compares equality of header values
+    pub fn cmp_header(&self, name: &str, value: &str) -> bool {
+        let hdr = self.get_header(name);
+        hdr.is_some() && hdr.unwrap().eq_ignore_ascii_case(value)
+    }
 }
 
 impl Default for HttpRequest {

@@ -1,8 +1,9 @@
 //! HTTP response and its constructors
 
+use blake3_lite::Hasher;
 use percent_encoding_lite::{is_encoded, encode, Bitmask};
 
-use crate::reqres::{HttpHeader, HttpBody, StatusCode};
+use crate::reqres::{HttpRequest, HttpHeader, HttpBody, StatusCode};
 use crate::reqres::sse::HttpSse;
 
 /// Your response
@@ -55,8 +56,25 @@ pub fn text(text: impl Into<String>) -> HttpResponse {
 }
 
 /// HTML response (`text/html`)
-pub fn html(html: impl Into<String>) -> HttpResponse {
-    HttpResponse::with_type("text/html; charset=utf-8", html.into())
+///
+/// Also stamps an ETag to enable caching
+pub fn html(req: &HttpRequest, html: impl Into<String>) -> HttpResponse {
+    let html = html.into();
+
+    let mut hasher = Hasher::new();
+    hasher.update(html.as_bytes());
+    // You'd probably execute me for that but I see no security flaws to truncate Blake3 for caching purposes
+    let mut hash = [0; 8];
+    hasher.finalize(&mut hash);
+    let hex = format!("\"{}\"", crate::util::hex(&hash));
+
+    let mut res = HttpResponse::with_type("text/html; charset=utf-8", html);
+    if req.cmp_header("If-None-Match", &hex) {
+        res.code = StatusCode::NOT_MODIFIED;
+        res.body = HttpBody::Empty;
+    }
+    res.add_header("ETag", hex);
+    res
 }
 
 /// JSON response (`application/json`)

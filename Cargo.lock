@@ -3,6 +3,10 @@
 version = 4
 
 [[package]]
+name = "blake3_lite"
+version = "0.1.0"
+
+[[package]]
 name = "bytes"
 version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17,6 +21,7 @@ source = "git+https://github.com/Neltharion01/chrono_lite#adfbb4cca412ca549a8bd3
 name = "dhttp"
 version = "0.1.0"
 dependencies = [
+ "blake3_lite",
  "chrono_lite",
  "indoc",
  "percent_encoding_lite",

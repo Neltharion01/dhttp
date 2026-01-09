@@ -100,8 +100,7 @@ impl HttpServer {
                 conn: (&mut conn).take(req.len),
                 to_send: b"",
             };
-            let expect = req.get_header("Expect");
-            if expect.is_some() && expect.unwrap().eq_ignore_ascii_case("100-continue") {
+            if req.cmp_header("Expect", "100-continue") {
                 body.to_send = b"HTTP/1.1 100 Continue\r\n\r\n";
             }
 
@@ -154,8 +153,8 @@ impl HttpServer {
                 res.add_header("Connection", "close");
                 connection_close = true;
             } else if req.version.major == 1 {
-                let connection = req.get_header("Connection");
-                if connection.is_some() && connection.unwrap().eq_ignore_ascii_case("keep-alive") {
+                // add keep-alive only if client wants it too
+                if req.cmp_header("Connection", "keep-alive") {
                     res.add_header("Connection", "keep-alive");
                 } else {
                     res.add_header("Connection", "close");
