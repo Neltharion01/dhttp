@@ -5,6 +5,7 @@ version = 4
 [[package]]
 name = "blake3_lite"
 version = "0.1.0"
+source = "git+https://github.com/Neltharion01/blake3_lite#292dbf4ad2d133c5a9442d273ca44539565afba2"
 
 [[package]]
 name = "bytes"
