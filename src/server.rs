@@ -67,7 +67,7 @@ impl HttpServer {
             let req = h1::read((&mut conn).take(self.max_headers_size)).await;
             if let Err(err) = req {
                 if let HttpRequestError::Io(err) = err {
-                    // IO errors should not be handler
+                    // IO errors should not be handled
                     return Err(err);
                 } else {
                     // Could not parse request, return Bad request
