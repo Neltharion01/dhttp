@@ -1,8 +1,6 @@
 use std::io;
 use std::fmt;
-use std::pin::Pin;
-
-use tokio::fs::File;
+use std::fs::File;
 
 use crate::core::connection::HttpConnection;
 use crate::util::escape;
@@ -14,22 +12,7 @@ use crate::util::escape;
 /// Use in [`HttpBody::Upgrade`]. Only applicable to HTTP/1.1
 pub trait HttpUpgrade: Send {
     /// Handles the upgrade
-    ///
-    /// Equivalent signature:
-    /// `async fn upgrade(&mut self, conn: &mut dyn HttpConnection) -> io::Result<()>`
-    fn upgrade(&mut self, conn: &mut dyn HttpConnection) -> impl Future<Output = io::Result<()>> + Send;
-}
-
-/// Dyn version of [`HttpUpgrade`]
-pub trait HttpUpgradeRaw: Send {
-    /// Handles the upgrade (dyn version)
-    fn upgrade_raw<'a>(&'a mut self, conn: &'a mut dyn HttpConnection) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + 'a>>;
-}
-
-impl<T: HttpUpgrade> HttpUpgradeRaw for T {
-    fn upgrade_raw<'a>(&'a mut self, conn: &'a mut dyn HttpConnection) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + 'a>> {
-        Box::pin(self.upgrade(conn))
-    }
+    fn upgrade(&mut self, conn: &mut dyn HttpConnection) -> io::Result<()>;
 }
 
 /// Body of the response
@@ -42,7 +25,7 @@ pub enum HttpBody {
     /// File handle to read
     File { file: File, len: u64 },
     /// Protocol upgrade
-    Upgrade(Box<dyn HttpUpgradeRaw>),
+    Upgrade(Box<dyn HttpUpgrade>),
 }
 
 impl fmt::Debug for HttpBody {

@@ -1,20 +1,17 @@
 //! HTTP server
 
-use std::io;
+use std::io::{self, Read};
 use std::sync::Arc;
-use std::net::SocketAddr;
 use std::time::Duration;
 
-use tokio::io::{BufReader, AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpSocket;
-use socket2::SockRef;
+use may::go;
+use may::net::TcpListener;
 
 use crate::h1::{self, HttpRequestError};
 use crate::reqres::{HttpRequest, StatusCode};
-use crate::core::{HttpService, HttpServiceRaw, HttpErrorHandler, HttpErrorType, HttpLogger};
+use crate::core::{HttpService, HttpErrorHandler, HttpErrorType, HttpLogger};
 use crate::core::connection::{HttpConnection, EmitContinue};
 use crate::services::{DefaultService, DefaultLogger, ErrorPageHandler};
-use crate::util::future::Or;
 
 const DEFAULT_MAX_HEADERS_SIZE: u64 = 65536; // 64KB
 
@@ -22,7 +19,7 @@ const DEFAULT_MAX_HEADERS_SIZE: u64 = 65536; // 64KB
 pub struct HttpServer {
     pub name: String,
     pub max_headers_size: u64,
-    pub service: Box<dyn HttpServiceRaw>,
+    pub service: Box<dyn HttpService>,
     pub error_handler: Box<dyn HttpErrorHandler>,
     pub logger: Box<dyn HttpLogger>,
 }
@@ -61,10 +58,10 @@ impl Default for HttpServer {
 }
 
 impl HttpServer {
-    async fn handle_connection(&self, mut conn: impl HttpConnection) -> io::Result<()> {
+    fn handle_connection(&self, mut conn: impl HttpConnection) -> io::Result<()> {
         let mut connection_close = false;
         while !connection_close {
-            let req = h1::read((&mut conn).take(self.max_headers_size)).await;
+            let req = h1::read(Read::by_ref(&mut conn).take(self.max_headers_size));
             if let Err(err) = req {
                 if let HttpRequestError::Io(err) = err {
                     // IO errors should not be handled
@@ -72,8 +69,8 @@ impl HttpServer {
                 } else {
                     // Could not parse request, return Bad request
                     let res = self.error_handler.plain_code(StatusCode::BAD_REQUEST);
-                    h1::send(&HttpRequest::default(), res, &mut conn).await?;
-                    return conn.shutdown().await;
+                    h1::send(&HttpRequest::default(), res, &mut conn)?;
+                    return conn.shutdown();
                 }
             }
             // Request is Ok
@@ -88,8 +85,8 @@ impl HttpServer {
             // These connections are not supported
             if req.version.major != 1 {
                 let res = self.error_handler.plain_code(StatusCode::HTTP_VERSION_NOT_SUPPORTED);
-                h1::send(&req, res, &mut conn).await?;
-                return conn.shutdown().await;
+                h1::send(&req, res, &mut conn)?;
+                return conn.shutdown();
             }
 
             // Before starting file upload, curl expects server to send `100 Continue` response
@@ -109,8 +106,8 @@ impl HttpServer {
 
             // Before executing the service, we have to check if request is compatible
             // This is connection handler's responsibility
-            let mut res = match self.service.filter_raw(&req.route, &req) {
-                Ok(()) => self.service.request_raw(&req.route, &req, &mut body).await,
+            let mut res = match self.service.filter(&req.route, &req) {
+                Ok(()) => self.service.request(&req.route, &req, &mut body),
                 Err(err) => Err(err),
             };
 
@@ -121,7 +118,7 @@ impl HttpServer {
                 // Response is Err, should be handled with defined error handler
                 let mut handled = match err.error_type() {
                     // IO error
-                    HttpErrorType::Fatal => return conn.shutdown().await,
+                    HttpErrorType::Fatal => return conn.shutdown(),
                     // Status code
                     HttpErrorType::Hidden => self.error_handler.plain_code(err.status_code()),
                     // Error with description
@@ -163,51 +160,26 @@ impl HttpServer {
             }
 
             // Now, send the response
-            h1::send(&req, res, &mut conn).await?;
+            h1::send(&req, res, &mut conn)?;
         }
         // Loop ended, we close the connection now
-        conn.shutdown().await
+        conn.shutdown()
     }
 }
 
 /// Starts handling connections on a given [`HttpServer`], without TLS
-pub async fn serve_tcp(addr: &str, server: impl Into<Arc<HttpServer>>) -> io::Result<()> {
-    let addr: SocketAddr = addr.parse().map_err(io::Error::other)?;
-
-    let sock = match addr {
-        SocketAddr::V4(_) => TcpSocket::new_v4()?,
-        SocketAddr::V6(_) => TcpSocket::new_v6()?,
-    };
-
-    if addr.is_ipv6() && addr.ip().is_unspecified() {
-        // allows to use [::] for both ipv4 and ipv6 on windows
-        SockRef::from(&sock).set_only_v6(false)?;
-    }
-
-    // https://github.com/tokio-rs/mio/blob/b0578c2d166c2ebc78dfd5f70395591351ba8dde/src/net/tcp/listener.rs#L73
-    // TL;DR socket is active some time after closing and you can't rebind it even if you have exited
-    #[cfg(not(windows))]
-    sock.set_reuseaddr(true)?;
-    // already buffered
-    sock.set_nodelay(true)?;
-
-    sock.bind(addr)?;
-
-    let tcp = sock.listen(128)?;
+pub fn serve_tcp(addr: &str, server: impl Into<Arc<HttpServer>>) -> io::Result<()> {
+    let tcp = TcpListener::bind(addr)?;
     let server = server.into();
     let mut err_shown = false;
     loop {
-        // This way, shutdown is handled gracefully
-        let result = Or::new(tcp.accept(), tokio::signal::ctrl_c()).await;
-        if result.is_err() { break; }
-
-        match result.unwrap() {
+        match tcp.accept() {
             Ok((conn, _addr)) => {
                 err_shown = false;
                 let server2 = Arc::clone(&server);
-                tokio::spawn(async move {
+                go!(move || {
                     // ignore network errors
-                    let _ = server2.handle_connection(BufReader::new(conn)).await;
+                    let _ = server2.handle_connection(conn);
                 });
             }
             Err(e) => {
@@ -217,19 +189,8 @@ pub async fn serve_tcp(addr: &str, server: impl Into<Arc<HttpServer>>) -> io::Re
                     err_shown = true;
                 }
                 let d = Duration::from_millis(100);
-                tokio::time::sleep(d).await;
+                may::coroutine::sleep(d);
             }
         };
     }
-
-    Ok(())
-}
-
-/// Builds the tokio runtime
-///
-/// This function is a simple replacement for `#[tokio::main]` that does not use macros
-pub fn tokio_rt() -> io::Result<tokio::runtime::Runtime> {
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
 }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::core::{HttpServiceRaw, HttpService, HttpResult, HttpRead};
+use crate::core::{HttpService, HttpResult, HttpRead};
 use crate::reqres::{HttpRequest, StatusCode};
 
 /// Router is a service that nests other services on chosen routes
@@ -39,9 +39,9 @@ use crate::reqres::{HttpRequest, StatusCode};
 #[derive(Default)]
 pub struct Router {
     /// Exact routes
-    exact: HashMap<String, Box<dyn HttpServiceRaw>>,
+    exact: HashMap<String, Box<dyn HttpService>>,
     /// Nested routes
-    nested: Vec<(String, Box<dyn HttpServiceRaw>)>,
+    nested: Vec<(String, Box<dyn HttpService>)>,
 }
 
 impl Router {
@@ -51,7 +51,7 @@ impl Router {
     }
 
     /// Adds a new route
-    pub fn add(&mut self, route: &str, service: impl HttpServiceRaw) -> &mut Self {
+    pub fn add(&mut self, route: &str, service: impl HttpService) -> &mut Self {
         let mut route = route.to_string();
         if route.ends_with("/") {
             route.pop();
@@ -62,7 +62,7 @@ impl Router {
         self
     }
 
-    fn find<'a, 'b>(&'a self, route: &'b str) -> Option<(&'b str, &'a dyn HttpServiceRaw)> {
+    fn find<'a, 'b>(&'a self, route: &'b str) -> Option<(&'b str, &'a dyn HttpService)> {
         // remove url params part
         let mut route_withoutparams = route;
         if let Some(params_index) = route.find('?') {
@@ -91,16 +91,16 @@ impl Router {
 }
 
 impl HttpService for Router {
-    async fn request(&self, route: &str, req: &HttpRequest, body: &mut dyn HttpRead) -> HttpResult {
+    fn request(&self, route: &str, req: &HttpRequest, body: &mut dyn HttpRead) -> HttpResult {
         match self.find(route) {
-            Some((route, service)) => service.request_raw(route, req, body).await,
+            Some((route, service)) => service.request(route, req, body),
             None => Err(StatusCode::NOT_FOUND.into()),
         }
     }
 
     fn filter(&self, route: &str, req: &HttpRequest) -> HttpResult<()> {
         match self.find(route) {
-            Some((route, service)) => service.filter_raw(route, req),
+            Some((route, service)) => service.filter(route, req),
             None => Err(StatusCode::NOT_FOUND.into()),
         }
     }

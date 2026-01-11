@@ -1,8 +1,7 @@
 //! Files service
 
 use std::path::PathBuf;
-
-use tokio::fs;
+use std::fs;
 
 use crate::core::{HttpService, HttpResult, HttpRead};
 use crate::reqres::{res, HttpRequest, HttpMethod, StatusCode};
@@ -20,15 +19,15 @@ impl FilesService {
 }
 
 impl HttpService for FilesService {
-    async fn request(&self, route: &str, req: &HttpRequest, _body: &mut dyn HttpRead) -> HttpResult {
+    fn request(&self, route: &str, req: &HttpRequest, _body: &mut dyn HttpRead) -> HttpResult {
         let path = self.path.join(path::sanitize(route)?);
 
-        let metadata = fs::metadata(&path).await?;
+        let metadata = fs::metadata(&path)?;
 
         if metadata.is_dir() {
             Err(StatusCode::NOT_FOUND.into())
         } else {
-            res::file(req, &path).await
+            res::file(req, &path)
         }
     }
 

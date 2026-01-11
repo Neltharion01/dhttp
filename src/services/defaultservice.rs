@@ -5,7 +5,7 @@ use crate::reqres::{res, HttpRequest};
 pub struct DefaultService;
 
 impl HttpService for DefaultService {
-    async fn request(&self, _route: &str, _req: &HttpRequest, _body: &mut dyn HttpRead) -> HttpResult {
+    fn request(&self, _route: &str, _req: &HttpRequest, _body: &mut dyn HttpRead) -> HttpResult {
         Ok(res::text("drakohttp is here!\n"))
     }
 }

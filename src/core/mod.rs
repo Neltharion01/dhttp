@@ -1,7 +1,7 @@
 //! Core traits
 
 mod service;
-pub use service::{HttpService, HttpServiceRaw};
+pub use service::HttpService;
 mod error;
 pub use error::{HttpError, HttpErrorType};
 mod logger;

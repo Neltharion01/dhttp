@@ -94,12 +94,4 @@ impl HttpError for io::Error {
 }
 
 impl HttpError for Infallible {}
-
-impl HttpError for tokio::task::JoinError {
-    fn error_type(&self) -> HttpErrorType {
-        // This is a panic message, should not be displayed
-        HttpErrorType::Hidden
-    }
-}
-
 impl HttpError for std::string::FromUtf8Error {}

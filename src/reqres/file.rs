@@ -1,21 +1,19 @@
-use std::io::SeekFrom;
+use std::io::{Seek, SeekFrom};
 use std::path::Path;
 use std::ffi::OsStr;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use std::time::UNIX_EPOCH;
-
-use tokio::io::AsyncSeekExt;
-use tokio::fs::File;
+use std::fs::File;
 
 use crate::core::HttpResult;
 use crate::reqres::{HttpRequest, HttpResponse, HttpHeader, HttpBody, StatusCode};
 use crate::util::httpdate;
 
 /// Responds with a file
-pub async fn file(req: &HttpRequest, name: &Path) -> HttpResult {
-    let mut file = File::open(name).await?;
-    let metadata = file.metadata().await?;
+pub fn file(req: &HttpRequest, name: &Path) -> HttpResult {
+    let mut file = File::open(name)?;
+    let metadata = file.metadata()?;
     let mut len = metadata.len();
 
     // becomes PARTIAL_CONTENT if range was served
@@ -53,7 +51,7 @@ pub async fn file(req: &HttpRequest, name: &Path) -> HttpResult {
                 value: format!("bytes {start}-{end}/{len}"),
             });
 
-            file.seek(SeekFrom::Start(start)).await?;
+            file.seek(SeekFrom::Start(start))?;
             len = end - start + 1;
             code = StatusCode::PARTIAL_CONTENT;
         } else {

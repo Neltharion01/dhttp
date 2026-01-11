@@ -1,37 +1,41 @@
 //! Connection types
 
-use std::io::{self, ErrorKind};
-use std::net::SocketAddr;
-use std::pin::Pin;
-use std::task::{Context, Poll, ready};
+use std::io::{self, Read, Write, Take};
+use std::net::{SocketAddr, Shutdown};
 
-use tokio::io::{AsyncRead, AsyncBufRead, AsyncWrite, BufReader, ReadBuf, Take};
-use tokio::net::TcpStream;
+use may::net::TcpStream;
 
 /// Async buffered reader stream
-pub trait HttpRead: AsyncBufRead + Unpin + Send + Sync {}
-impl<T: AsyncBufRead + Unpin + Send + Sync> HttpRead for T {}
+pub trait HttpRead: Read + Unpin + Send + Sync {}
+impl<T: Read + Unpin + Send + Sync> HttpRead for T {}
 
 /// Async writer stream
-pub trait HttpWrite: AsyncWrite + Unpin + Send + Sync {}
-impl<T: AsyncWrite + Unpin + Send + Sync> HttpWrite for T {}
+pub trait HttpWrite: Write + Unpin + Send + Sync {}
+impl<T: Write + Unpin + Send + Sync> HttpWrite for T {}
 
-/// Async BufRead/Write stream that represents an HTTP connection
+/// Async Read/Write stream that represents an HTTP connection
 pub trait HttpConnection: HttpRead + HttpWrite {
     /// Retrieve client's IP address of this connection
     fn getpeername(&self) -> io::Result<SocketAddr>;
     /// Is it HTTPS?
     fn is_secure(&self) -> bool;
+
+    fn shutdown(&self) -> io::Result<()>;
 }
-impl HttpConnection for BufReader<TcpStream> {
+impl HttpConnection for TcpStream {
     fn getpeername(&self) -> io::Result<SocketAddr> {
-        self.get_ref().peer_addr()
+        self.peer_addr()
     }
 
     fn is_secure(&self) -> bool {
         false
     }
+
+    fn shutdown(&self) -> io::Result<()> {
+        self.shutdown(Shutdown::Both)
+    }
 }
+
 // rustc why is this not automatic?????
 impl<T: HttpConnection> HttpConnection for &mut T {
     fn getpeername(&self) -> io::Result<SocketAddr> {
@@ -41,6 +45,10 @@ impl<T: HttpConnection> HttpConnection for &mut T {
     fn is_secure(&self) -> bool {
         (**self).is_secure()
     }
+
+    fn shutdown(&self) -> io::Result<()> {
+        (**self).shutdown()
+    }
 }
 
 pub(crate) struct EmitContinue<T: HttpConnection> {
@@ -48,25 +56,9 @@ pub(crate) struct EmitContinue<T: HttpConnection> {
     pub to_send: &'static [u8],
 }
 
-impl<T: HttpConnection> AsyncRead for EmitContinue<T> {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        while !self.to_send.is_empty() {
-            let to_send = self.to_send;
-            let written = ready!(Pin::new(self.conn.get_mut()).poll_write(cx, to_send))?;
-            if written == 0 { return Poll::Ready(Err(ErrorKind::WriteZero.into())); }
-            self.to_send = &self.to_send[written..];
-        }
-
-        Pin::new(&mut self.conn).poll_read(cx, buf)
-    }
-}
-
-impl<T: HttpConnection> AsyncBufRead for EmitContinue<T> {
-    fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<&[u8]>> {
-        Pin::new(&mut Pin::into_inner(self).conn).poll_fill_buf(cx)
-    }
-
-    fn consume(self: Pin<&mut Self>, amt: usize) {
-        Pin::new(&mut Pin::into_inner(self).conn).consume(amt)
+impl<T: HttpConnection> Read for EmitContinue<T> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.conn.get_mut().write_all(self.to_send)?;
+        self.conn.read(buf)
     }
 }

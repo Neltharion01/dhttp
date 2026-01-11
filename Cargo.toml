@@ -11,17 +11,11 @@ repository = "https://github.com/Neltharion01/dhttp"
 keywords = ["http", "web"]
 
 [dependencies]
-# These two are already in-tree because of tokio
-pin-project-lite = "0.2"
-socket2 = "0.6"
+may = "0.3"
 
 chrono_lite = { git = "https://github.com/Neltharion01/chrono_lite" }
 percent_encoding_lite = { git = "https://github.com/Neltharion01/percent_encoding_lite" }
 blake3_lite = { git = "https://github.com/Neltharion01/blake3_lite" }
-
-[dependencies.tokio]
-version = "1.48"
-features = ["rt-multi-thread", "fs", "net", "io-util", "time", "signal"]
 
 [dev-dependencies]
 indoc = "2.0" # examples/fileserver.rs

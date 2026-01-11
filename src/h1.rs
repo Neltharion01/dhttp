@@ -1,11 +1,9 @@
 //! HTTP/1.1 request parsing/reading
 
-use std::io::{self, ErrorKind};
+use std::io::{self, ErrorKind, Read, BufReader, BufRead};
 use std::fmt::{self, Write};
 use std::string::FromUtf8Error;
 use std::net::{IpAddr, Ipv4Addr};
-
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 
 use crate::reqres::{HttpRequest, HttpResponse, HttpHeader, HttpVersion, HttpMethod, HttpBody};
 use crate::core::connection::{HttpRead, HttpConnection};
@@ -39,11 +37,11 @@ fn split3(line: &str) -> Option<(&str, &str, &str)> {
 }
 
 /// Reads a request from the provided stream
-pub(crate) async fn read(conn: impl HttpRead) -> Result<HttpRequest, HttpRequestError> {
-    let mut lines = conn.lines();
+pub(crate) fn read(conn: impl HttpRead) -> Result<HttpRequest, HttpRequestError> {
+    let mut lines = BufReader::new(conn).lines();
 
     // get first line
-    let first = lines.next_line().await?.ok_or(HttpRequestError::EarlyEof)?;
+    let first = lines.next().ok_or(HttpRequestError::EarlyEof)??;
     // and slice it by 3 components
     let (method, route, version) = split3(&first).ok_or(HttpRequestError::InvalidPrelude)?;
     // then parse method, allocate route, parse version
@@ -54,7 +52,7 @@ pub(crate) async fn read(conn: impl HttpRead) -> Result<HttpRequest, HttpRequest
     let mut headers = vec![];
     loop {
         // will return if connection is shut down without \n\n
-        let line = lines.next_line().await?.ok_or(HttpRequestError::EarlyEof)?;
+        let line = lines.next().ok_or(HttpRequestError::EarlyEof)??;
         if line.is_empty() {
             // empty line = end of request
             break;
@@ -73,7 +71,7 @@ pub(crate) async fn read(conn: impl HttpRead) -> Result<HttpRequest, HttpRequest
 }
 
 /// Send the request
-pub(crate) async fn send(req: &HttpRequest, res: HttpResponse, conn: &mut dyn HttpConnection) -> io::Result<()> {
+pub(crate) fn send(req: &HttpRequest, res: HttpResponse, conn: &mut dyn HttpConnection) -> io::Result<()> {
     let code = res.code;
     let status = code.as_str();
     let mut buf = format!("HTTP/1.1 {code} {status}\r\n");
@@ -94,7 +92,7 @@ pub(crate) async fn send(req: &HttpRequest, res: HttpResponse, conn: &mut dyn Ht
     buf.push_str("\r\n");
 
     // Send headers
-    conn.write_all(buf.as_bytes()).await?;
+    conn.write_all(buf.as_bytes())?;
 
     // Don't send body on head requests
     if req.method == HttpMethod::Head { return Ok(()); }
@@ -103,14 +101,14 @@ pub(crate) async fn send(req: &HttpRequest, res: HttpResponse, conn: &mut dyn Ht
     match res.body {
         HttpBody::Empty => {},
         HttpBody::Bytes(bytes) => {
-            conn.write_all(&bytes).await?;
+            conn.write_all(&bytes)?;
         }
         HttpBody::File { file, len } => {
-            tokio::io::copy(&mut file.take(len), conn).await?;
+            io::copy(&mut file.take(len), conn)?;
         }
         HttpBody::Upgrade(mut handler) => {
-            handler.upgrade_raw(conn).await?;
-            conn.shutdown().await?;
+            handler.upgrade(conn)?;
+            conn.shutdown()?;
         }
     }
 
