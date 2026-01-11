@@ -1,7 +1,7 @@
 //! HTTP/1.1 request parsing/reading
 
-use std::io::{self, ErrorKind};
-use std::fmt::{self, Write};
+use std::io::{self, ErrorKind, Write};
+use std::fmt;
 use std::string::FromUtf8Error;
 use std::net::{IpAddr, Ipv4Addr};
 
@@ -76,7 +76,7 @@ pub(crate) async fn read(conn: impl HttpRead) -> Result<HttpRequest, HttpRequest
 pub(crate) async fn send(req: &HttpRequest, res: HttpResponse, conn: &mut dyn HttpConnection) -> io::Result<()> {
     let code = res.code;
     let status = code.as_str();
-    let mut buf = format!("HTTP/1.1 {code} {status}\r\n");
+    let mut buf = format!("HTTP/1.1 {code} {status}\r\n").into_bytes();
 
     for header in &res.headers {
         write!(&mut buf, "{}: {}\r\n", &header.name, &header.value).unwrap();
@@ -91,20 +91,21 @@ pub(crate) async fn send(req: &HttpRequest, res: HttpResponse, conn: &mut dyn Ht
         HttpBody::File { len, .. } => write!(&mut buf, "Content-Length: {}\r\n", len).unwrap(),
         HttpBody::Empty | HttpBody::Upgrade(_) => {},
     };
-    buf.push_str("\r\n");
+    buf.extend(b"\r\n");
 
-    // Send headers
-    conn.write_all(buf.as_bytes()).await?;
+    if let HttpBody::Bytes(bytes) = &res.body {
+        buf.extend(bytes);
+    }
+
+    // Send static part
+    conn.write_all(&buf).await?;
 
     // Don't send body on head requests
     if req.method == HttpMethod::Head { return Ok(()); }
 
     // Now, handle the body
     match res.body {
-        HttpBody::Empty => {},
-        HttpBody::Bytes(bytes) => {
-            conn.write_all(&bytes).await?;
-        }
+        HttpBody::Empty | HttpBody::Bytes(_) => {},
         HttpBody::File { file, len } => {
             tokio::io::copy(&mut file.take(len), conn).await?;
         }
