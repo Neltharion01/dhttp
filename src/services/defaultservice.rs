@@ -2,6 +2,7 @@ use crate::core::{HttpService, HttpResult, HttpRead};
 use crate::reqres::{res, HttpRequest};
 
 /// Default service which only returns `"drakohttp is here!"`
+#[derive(Debug)]
 pub struct DefaultService;
 
 impl HttpService for DefaultService {

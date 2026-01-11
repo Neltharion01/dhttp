@@ -2,6 +2,7 @@
 
 use blake3_lite::Hasher;
 use percent_encoding_lite::{is_encoded, encode, Bitmask};
+use tracing::instrument;
 
 use crate::reqres::{HttpRequest, HttpHeader, HttpBody, StatusCode};
 use crate::reqres::sse::HttpSse;
@@ -58,9 +59,8 @@ pub fn text(text: impl Into<String>) -> HttpResponse {
 /// HTML response (`text/html`)
 ///
 /// Also stamps an ETag to enable caching
-pub fn html(req: &HttpRequest, html: impl Into<String>) -> HttpResponse {
-    let html = html.into();
-
+#[instrument]
+pub fn html(req: &HttpRequest, html: &str) -> HttpResponse {
     let mut hasher = Hasher::new();
     hasher.update(html.as_bytes());
     // You'd probably execute me for that but I see no security flaws to truncate Blake3 for caching purposes

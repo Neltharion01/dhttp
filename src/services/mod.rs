@@ -8,7 +8,7 @@ mod files;
 pub use files::FilesService;
 
 mod log;
-pub use log::DefaultLogger;
+pub use log::{DefaultLogger, NoLogger};
 
 mod errorpage;
 pub use errorpage::ErrorPageHandler;

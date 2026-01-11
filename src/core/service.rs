@@ -1,4 +1,7 @@
 use std::pin::Pin;
+use std::fmt::Debug;
+
+use tracing::instrument;
 
 use crate::reqres::{HttpRequest, HttpMethod, StatusCode};
 use crate::core::{HttpResult, HttpRead};
@@ -6,7 +9,7 @@ use crate::core::{HttpResult, HttpRead};
 /// Basic building block of your web application
 ///
 /// Use it to implement the service, and use [`HttpServiceRaw`] to call it from a `&dyn` reference
-pub trait HttpService: Send + Sync + 'static {
+pub trait HttpService: Debug + Send + Sync + 'static {
     /// Serve the request
     ///
     /// Equivalent signature:
@@ -19,6 +22,7 @@ pub trait HttpService: Send + Sync + 'static {
     /// Checks if request is valid
     ///
     /// By default, it checks that route is `"/"`, method is [`HttpMethod::Get`] and `req.len` is 0
+    #[instrument]
     fn filter(&self, route: &str, req: &HttpRequest) -> HttpResult<()> {
         if route != "/" { return Err(StatusCode::NOT_FOUND.into()); }
         if req.method != HttpMethod::Get { return Err(StatusCode::METHOD_NOT_ALLOWED.into()); }

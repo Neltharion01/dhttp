@@ -9,6 +9,7 @@ use crate::reqres::{res, HttpRequest, HttpMethod, StatusCode};
 use crate::util::path;
 
 /// Hosts a directory with static files
+#[derive(Debug)]
 pub struct FilesService {
     pub path: PathBuf,
 }

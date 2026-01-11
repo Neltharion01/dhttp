@@ -6,6 +6,7 @@ use std::string::FromUtf8Error;
 use std::net::{IpAddr, Ipv4Addr};
 
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
+use tracing::instrument;
 
 use crate::reqres::{HttpRequest, HttpResponse, HttpHeader, HttpVersion, HttpMethod, HttpBody};
 use crate::core::connection::{HttpRead, HttpConnection};
@@ -39,6 +40,7 @@ fn split3(line: &str) -> Option<(&str, &str, &str)> {
 }
 
 /// Reads a request from the provided stream
+#[instrument]
 pub(crate) async fn read(conn: impl HttpRead) -> Result<HttpRequest, HttpRequestError> {
     let mut lines = conn.lines();
 
@@ -73,6 +75,7 @@ pub(crate) async fn read(conn: impl HttpRead) -> Result<HttpRequest, HttpRequest
 }
 
 /// Send the request
+#[instrument]
 pub(crate) async fn send(req: &HttpRequest, res: HttpResponse, conn: &mut dyn HttpConnection) -> io::Result<()> {
     let code = res.code;
     let status = code.as_str();

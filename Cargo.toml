@@ -19,9 +19,16 @@ chrono_lite = { git = "https://github.com/Neltharion01/chrono_lite" }
 percent_encoding_lite = { git = "https://github.com/Neltharion01/percent_encoding_lite" }
 blake3_lite = { git = "https://github.com/Neltharion01/blake3_lite" }
 
+tracing = "0.1"
+tracing-tracy = "0.11"
+tracing-subscriber = "0.3"
+
 [dependencies.tokio]
 version = "1.48"
-features = ["rt-multi-thread", "fs", "net", "io-util", "time", "signal"]
+features = ["rt-multi-thread", "fs", "net", "io-util", "time", "signal", "full", "tracing"]
 
 [dev-dependencies]
 indoc = "2.0" # examples/fileserver.rs
+
+[profile.release]
+debug = true

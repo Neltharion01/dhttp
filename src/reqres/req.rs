@@ -1,6 +1,8 @@
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr};
 
+use tracing::instrument;
+
 use crate::reqres::HttpHeader;
 
 /// Version used in request
@@ -101,6 +103,7 @@ impl HttpRequest {
     }
 
     /// Compares equality of header values
+    #[instrument]
     pub fn cmp_header(&self, name: &str, value: &str) -> bool {
         let hdr = self.get_header(name);
         hdr.is_some() && hdr.unwrap().eq_ignore_ascii_case(value)

@@ -4,16 +4,18 @@ use std::io;
 use std::sync::Arc;
 use std::net::SocketAddr;
 use std::time::Duration;
+use std::fmt;
 
 use tokio::io::{BufReader, AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpSocket;
 use socket2::SockRef;
+use tracing::instrument;
 
 use crate::h1::{self, HttpRequestError};
 use crate::reqres::{HttpRequest, StatusCode};
 use crate::core::{HttpService, HttpServiceRaw, HttpErrorHandler, HttpErrorType, HttpLogger};
 use crate::core::connection::{HttpConnection, EmitContinue};
-use crate::services::{DefaultService, DefaultLogger, ErrorPageHandler};
+use crate::services::{DefaultService, NoLogger, ErrorPageHandler};
 use crate::util::future::Or;
 
 const DEFAULT_MAX_HEADERS_SIZE: u64 = 65536; // 64KB
@@ -27,6 +29,12 @@ pub struct HttpServer {
     pub logger: Box<dyn HttpLogger>,
 }
 
+impl fmt::Debug for HttpServer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("HttpServer")
+    }
+}
+
 impl HttpServer {
     pub fn new() -> HttpServer {
         HttpServer {
@@ -34,7 +42,7 @@ impl HttpServer {
             max_headers_size: DEFAULT_MAX_HEADERS_SIZE,
             service: Box::new(DefaultService),
             error_handler: Box::new(ErrorPageHandler { name: "DrakoHTTP".to_string() }),
-            logger: Box::new(DefaultLogger),
+            logger: Box::new(NoLogger),
         }
     }
 
@@ -61,6 +69,7 @@ impl Default for HttpServer {
 }
 
 impl HttpServer {
+    #[instrument]
     async fn handle_connection(&self, mut conn: impl HttpConnection) -> io::Result<()> {
         let mut connection_close = false;
         while !connection_close {
@@ -171,7 +180,8 @@ impl HttpServer {
 }
 
 /// Starts handling connections on a given [`HttpServer`], without TLS
-pub async fn serve_tcp(addr: &str, server: impl Into<Arc<HttpServer>>) -> io::Result<()> {
+#[instrument]
+pub async fn serve_tcp(addr: &str, server: HttpServer) -> io::Result<()> {
     let addr: SocketAddr = addr.parse().map_err(io::Error::other)?;
 
     let sock = match addr {
@@ -194,7 +204,7 @@ pub async fn serve_tcp(addr: &str, server: impl Into<Arc<HttpServer>>) -> io::Re
     sock.bind(addr)?;
 
     let tcp = sock.listen(128)?;
-    let server = server.into();
+    let server = Arc::new(server);
     let mut err_shown = false;
     loop {
         // This way, shutdown is handled gracefully
@@ -229,7 +239,13 @@ pub async fn serve_tcp(addr: &str, server: impl Into<Arc<HttpServer>>) -> io::Re
 ///
 /// This function is a simple replacement for `#[tokio::main]` that does not use macros
 pub fn tokio_rt() -> io::Result<tokio::runtime::Runtime> {
-    tokio::runtime::Builder::new_multi_thread()
+    use tracing_subscriber::layer::SubscriberExt;
+
+    tracing::subscriber::set_global_default(
+        tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default())
+    ).expect("setup tracy layer");
+
+    tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
 }

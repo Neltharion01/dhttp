@@ -35,3 +35,9 @@ impl HttpLogger for DefaultLogger {
         println!("{} ({}: {})", self.format(req, res), error.name(), error);
     }
 }
+
+pub struct NoLogger;
+impl HttpLogger for NoLogger {
+    fn log(&self, _req: &HttpRequest, _res: &HttpResponse) {}
+    fn err(&self, _req: &HttpRequest, _res: &HttpResponse, _error: &dyn HttpError) {}
+}

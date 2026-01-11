@@ -4,17 +4,19 @@ use std::io::{self, ErrorKind};
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::task::{Context, Poll, ready};
+use std::fmt::Debug;
 
 use tokio::io::{AsyncRead, AsyncBufRead, AsyncWrite, BufReader, ReadBuf, Take};
 use tokio::net::TcpStream;
+use tracing::instrument;
 
 /// Async buffered reader stream
-pub trait HttpRead: AsyncBufRead + Unpin + Send + Sync {}
-impl<T: AsyncBufRead + Unpin + Send + Sync> HttpRead for T {}
+pub trait HttpRead: Debug + AsyncBufRead + Unpin + Send + Sync {}
+impl<T: Debug + AsyncBufRead + Unpin + Send + Sync> HttpRead for T {}
 
 /// Async writer stream
-pub trait HttpWrite: AsyncWrite + Unpin + Send + Sync {}
-impl<T: AsyncWrite + Unpin + Send + Sync> HttpWrite for T {}
+pub trait HttpWrite: Debug + AsyncWrite + Unpin + Send + Sync {}
+impl<T: Debug + AsyncWrite + Unpin + Send + Sync> HttpWrite for T {}
 
 /// Async BufRead/Write stream that represents an HTTP connection
 pub trait HttpConnection: HttpRead + HttpWrite {
@@ -24,6 +26,7 @@ pub trait HttpConnection: HttpRead + HttpWrite {
     fn is_secure(&self) -> bool;
 }
 impl HttpConnection for BufReader<TcpStream> {
+    #[instrument]
     fn getpeername(&self) -> io::Result<SocketAddr> {
         self.get_ref().peer_addr()
     }
@@ -43,6 +46,7 @@ impl<T: HttpConnection> HttpConnection for &mut T {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct EmitContinue<T: HttpConnection> {
     pub conn: Take<T>,
     pub to_send: &'static [u8],

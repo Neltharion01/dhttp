@@ -1,3 +1,5 @@
+use tracing::instrument;
+
 use crate::core::{HttpError, HttpErrorHandler};
 use crate::reqres::{res, HttpRequest, HttpResponse, StatusCode};
 
@@ -15,6 +17,7 @@ format!(r#"<!doctype html>
 }
 
 /// Default error handler, shows a nice error page
+#[derive(Debug)]
 pub struct ErrorPageHandler {
     pub name: String,
 }
@@ -23,10 +26,11 @@ impl HttpErrorHandler for ErrorPageHandler {
     fn error(&self, req: &HttpRequest, error: &dyn HttpError) -> HttpResponse {
         let code = error.status_code();
         let desc = error.http_description();
-        res::html(req, error_page(code.0, code.as_str(), &desc, &self.name))
+        res::html(req, &error_page(code.0, code.as_str(), &desc, &self.name))
     }
 
+    #[instrument]
     fn plain_code(&self, code: StatusCode) -> HttpResponse {
-        res::html(&HttpRequest::default(), error_page(code.0, code.as_str(), "", &self.name))
+        res::html(&HttpRequest::default(), &error_page(code.0, code.as_str(), "", &self.name))
     }
 }

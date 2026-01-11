@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 
 use crate::core::{HttpServiceRaw, HttpService, HttpResult, HttpRead};
 use crate::reqres::{HttpRequest, StatusCode};
@@ -103,5 +104,11 @@ impl HttpService for Router {
             Some((route, service)) => service.filter_raw(route, req),
             None => Err(StatusCode::NOT_FOUND.into()),
         }
+    }
+}
+
+impl fmt::Debug for Router {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("Router")
     }
 }
