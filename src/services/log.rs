@@ -1,12 +1,12 @@
-use chrono_lite::{Tm, time, localtime};
+//use chrono_lite::{Tm, time, localtime};
 use crate::core::{HttpLogger, HttpError};
 use crate::reqres::{HttpRequest, HttpResponse};
-use crate::util::escape;
+//use crate::util::escape;
 
 /// Default logger implementation
 pub struct DefaultLogger;
 impl DefaultLogger {
-    fn format(&self, req: &HttpRequest, res: &HttpResponse) -> String {
+/*    fn format(&self, req: &HttpRequest, res: &HttpResponse) -> String {
         let addr = req.addr;
         let method = escape::control_sequences(req.method.as_str());
         let route = escape::control_sequences(&req.route);
@@ -23,15 +23,16 @@ impl DefaultLogger {
         let agent = req.get_header("User-Agent").and_then(|a| a.split(' ').next()).unwrap_or("-");
         let agent = escape::control_sequences(agent);
         format!("[{date}] {addr} {agent} {method} {route} -> {code} {desc}")
-    }
+    }*/
 }
 
+#[allow(unused_variables)]
 impl HttpLogger for DefaultLogger {
     fn log(&self, req: &HttpRequest, res: &HttpResponse) {
-        println!("{}", self.format(req, res));
+//        println!("{}", self.format(req, res));
     }
 
     fn err(&self, req: &HttpRequest, res: &HttpResponse, error: &dyn HttpError) {
-        println!("{} ({}: {})", self.format(req, res), error.name(), error);
+//        println!("{} ({}: {})", self.format(req, res), error.name(), error);
     }
 }

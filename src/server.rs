@@ -59,9 +59,11 @@ impl Default for HttpServer {
 
 impl HttpServer {
     fn handle_connection(&self, mut conn: impl HttpConnection) -> io::Result<()> {
+        let mut buf = Vec::with_capacity(1024);
         let mut connection_close = false;
         while !connection_close {
-            let req = h1::read(Read::by_ref(&mut conn).take(self.max_headers_size));
+            buf.clear();
+            let req = h1::read(&mut buf, Read::by_ref(&mut conn).take(self.max_headers_size));
             if let Err(err) = req {
                 if let HttpRequestError::Io(err) = err {
                     // IO errors should not be handled
@@ -69,7 +71,7 @@ impl HttpServer {
                 } else {
                     // Could not parse request, return Bad request
                     let res = self.error_handler.plain_code(StatusCode::BAD_REQUEST);
-                    h1::send(&HttpRequest::default(), res, &mut conn)?;
+                    h1::send(HttpRequest::default(), res, &mut conn)?;
                     return conn.shutdown();
                 }
             }
@@ -85,7 +87,7 @@ impl HttpServer {
             // These connections are not supported
             if req.version.major != 1 {
                 let res = self.error_handler.plain_code(StatusCode::HTTP_VERSION_NOT_SUPPORTED);
-                h1::send(&req, res, &mut conn)?;
+                h1::send(req, res, &mut conn)?;
                 return conn.shutdown();
             }
 
@@ -116,7 +118,7 @@ impl HttpServer {
                 self.logger.log(&req, res);
             } else if let Err(err) = res {
                 // Response is Err, should be handled with defined error handler
-                let mut handled = match err.error_type() {
+                let handled = match err.error_type() {
                     // IO error
                     HttpErrorType::Fatal => return conn.shutdown(),
                     // Status code
@@ -124,8 +126,6 @@ impl HttpServer {
                     // Error with description
                     HttpErrorType::User => self.error_handler.error(&req, err.as_ref()),
                 };
-                // Always use the original status code in the error response (connection handler sets this)
-                handled.code = err.status_code();
                 // Log the error
                 match err.error_type() {
                     HttpErrorType::Fatal => unreachable!(),
@@ -160,7 +160,7 @@ impl HttpServer {
             }
 
             // Now, send the response
-            h1::send(&req, res, &mut conn)?;
+            h1::send(req, res, &mut conn)?;
         }
         // Loop ended, we close the connection now
         conn.shutdown()

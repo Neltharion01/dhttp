@@ -19,7 +19,7 @@ pub(crate) fn to_utf8(s: &[u8]) -> String {
     out
 }
 
-/// Escapes ASCII control sequences to avoid messing up your terminal
+/*/// Escapes ASCII control sequences to avoid messing up your terminal
 pub(crate) fn control_sequences(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for ch in s.chars() {
@@ -30,4 +30,4 @@ pub(crate) fn control_sequences(s: &str) -> String {
         }
     }
     out
-}
+}*/

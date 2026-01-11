@@ -13,18 +13,3 @@ pub use res::HttpResponse;
 pub mod sse;
 
 mod file;
-
-use std::fmt;
-
-/// Header key/value
-#[derive(Clone)]
-pub struct HttpHeader {
-    pub name: String,
-    pub value: String,
-}
-
-impl fmt::Debug for HttpHeader {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, "{}: {}", self.name, self.value)
-    }
-}

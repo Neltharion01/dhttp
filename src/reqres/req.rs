@@ -1,8 +1,6 @@
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr};
 
-use crate::reqres::HttpHeader;
-
 /// Version used in request
 #[derive(Clone, Copy)]
 pub struct HttpVersion {
@@ -24,20 +22,19 @@ impl fmt::Debug for HttpVersion {
 }
 
 /// Method of request
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum HttpMethod {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HttpMethod<'a> {
     Get, Head, Post, Put, Delete, Connect, Options, Trace, Patch,
     // it is not possible to add new variants here because for example
     // Get and Other("GET") would not be equal
     // but it is not possible to private enum variants in rust
-    Other(String)
+    Other(&'a str)
 }
 
-impl HttpMethod {
+impl<'a> HttpMethod<'a> {
     /// Parses method from provided str
-    pub fn new(method: &str) -> HttpMethod {
-        let method = method.to_ascii_uppercase();
-        match method.as_str() {
+    pub fn new(method: &'a str) -> HttpMethod<'a> {
+        match method {
             "GET" => HttpMethod::Get,
             "HEAD" => HttpMethod::Head,
             "POST" => HttpMethod::Post,
@@ -51,7 +48,7 @@ impl HttpMethod {
         }
     }
 
-    pub fn as_str(&self) -> &str {
+    pub fn as_str(self) -> &'a str {
         match self {
             HttpMethod::Get => "GET",
             HttpMethod::Head => "HEAD",
@@ -67,33 +64,36 @@ impl HttpMethod {
     }
 }
 
-impl fmt::Display for HttpMethod {
+impl fmt::Display for HttpMethod<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.write_str(self.as_str())
     }
 }
 
 /// Request from client to handle
-#[derive(Debug, Clone)]
 #[non_exhaustive]
-pub struct HttpRequest {
-    pub method: HttpMethod,
-    pub route: String,
+#[derive(Debug, Clone, Copy)]
+pub struct HttpRequest<'a> {
+    pub method: HttpMethod<'a>,
+    pub route: &'a str,
     pub version: HttpVersion,
-    pub headers: Vec<HttpHeader>,
+    pub headers: &'a str,
     /// Contents of the `Content-Length` header
     pub len: u64,
     /// IP address of this request (`0.0.0.0` if none)
     pub addr: IpAddr,
 }
 
-impl HttpRequest {
+impl<'a> HttpRequest<'a> {
     /// Retrieves a header value, if any
-    pub fn get_header<'a>(&'a self, name: &str) -> Option<&'a str> {
+    pub fn get_header(&'a self, name: &str) -> Option<&'a str> {
         let mut header = None;
-        for h in &self.headers {
-            if h.name.eq_ignore_ascii_case(name) {
-                header = Some(h.value.as_str());
+        for line in self.headers.split("\r\n") {
+            let mut line = line.split(':');
+            let hn = line.next().unwrap();
+            let Some(hv) = line.next() else { continue };
+            if hn.eq_ignore_ascii_case(name) {
+                header = Some(hv.trim());
                 break;
             }
         }
@@ -107,13 +107,13 @@ impl HttpRequest {
     }
 }
 
-impl Default for HttpRequest {
-    fn default() -> HttpRequest {
+impl Default for HttpRequest<'static> {
+    fn default() -> HttpRequest<'static> {
         HttpRequest {
             method: HttpMethod::Get,
-            route: String::new(),
+            route: "",
             version: HttpVersion { major: 0, minor: 0 },
-            headers: vec![],
+            headers: "",
             len: 0,
             addr: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
         }

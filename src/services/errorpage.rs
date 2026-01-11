@@ -23,10 +23,10 @@ impl HttpErrorHandler for ErrorPageHandler {
     fn error(&self, req: &HttpRequest, error: &dyn HttpError) -> HttpResponse {
         let code = error.status_code();
         let desc = error.http_description();
-        res::html(req, error_page(code.0, code.as_str(), &desc, &self.name))
+        res::html(req, code, error_page(code.0, code.as_str(), &desc, &self.name))
     }
 
     fn plain_code(&self, code: StatusCode) -> HttpResponse {
-        res::html(&HttpRequest::default(), error_page(code.0, code.as_str(), "", &self.name))
+        res::html(&HttpRequest::default(), code, error_page(code.0, code.as_str(), "", &self.name))
     }
 }

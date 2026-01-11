@@ -1,4 +1,4 @@
-use std::io::{Seek, SeekFrom};
+use std::io::{Write, Seek, SeekFrom};
 use std::path::Path;
 use std::ffi::OsStr;
 use std::collections::HashMap;
@@ -7,7 +7,7 @@ use std::time::UNIX_EPOCH;
 use std::fs::File;
 
 use crate::core::HttpResult;
-use crate::reqres::{HttpRequest, HttpResponse, HttpHeader, HttpBody, StatusCode};
+use crate::reqres::{HttpRequest, HttpResponse, HttpBody, StatusCode};
 use crate::util::httpdate;
 
 /// Responds with a file
@@ -18,38 +18,16 @@ pub fn file(req: &HttpRequest, name: &Path) -> HttpResult {
 
     // becomes PARTIAL_CONTENT if range was served
     let mut code = StatusCode::OK;
-    let content_type = get_content_type(name.extension()).unwrap_or_default().to_string();
-    let mut headers = vec![];
+    let content_type = get_content_type(name.extension()).unwrap_or_default();
     let mut body;
 
-    // Last-Modified
-    let time = metadata.modified().ok();
-    if let Some(value) = time // fails when field not supported
-        .and_then(httpdate::from_systime) // fails on overflow
-    {
-        headers.push(HttpHeader { name: "Last-Modified".to_string(), value });
-    }
-
-    // Date
-    if let Some(date) = httpdate::now() {
-        headers.push(HttpHeader { name: "Date".to_string(), value: date });
-    }
-
-    // Advertise byte ranges support
-    headers.push(HttpHeader {
-        name: "Accept-Ranges".to_string(),
-        value: "bytes".to_string(),
-    });
-
     // Parse byte range request
+    let mut cr = None;
     if let Some(range) = req.get_header("Range") {
         if let Some((start, mut end)) = parse_range(range) && start <= len && start <= end {
             end = end.min(len);
 
-            headers.push(HttpHeader {
-                name: "Content-Range".to_string(),
-                value: format!("bytes {start}-{end}/{len}"),
-            });
+            cr = Some((start, end, len));
 
             file.seek(SeekFrom::Start(start))?;
             len = end - start + 1;
@@ -63,6 +41,7 @@ pub fn file(req: &HttpRequest, name: &Path) -> HttpResult {
     body = HttpBody::File { file, len };
 
     // If-Modified-Since🐛🐛🐛
+    let time = metadata.modified().ok();
     if let Some(time) = time
         && let Some(time) = time.duration_since(UNIX_EPOCH).ok()
         && let Some(if_modified_since) = req.get_header("If-Modified-Since")
@@ -73,7 +52,28 @@ pub fn file(req: &HttpRequest, name: &Path) -> HttpResult {
         body = HttpBody::Empty;
     }
 
-    Ok(HttpResponse { code, headers, body, content_type })
+    let mut res = HttpResponse::new(code);
+    res.body = body;
+    res.add_header("Content-Type", content_type);
+
+    // Last-Modified
+    if let Some(value) = time // fails when field not supported
+        .and_then(httpdate::from_systime) // fails on overflow
+    {
+        res.add_header("Last-Modified", &value);
+    }
+
+    // Date
+    if let Some(date) = httpdate::now() { res.add_header("Date", &date); }
+
+    // Advertise byte ranges support
+    res.add_header("Accept-Ranges", "bytes");
+
+    if let Some((start, end, len)) = cr {
+        write!(&mut res.contents, "bytes {start}-{end}/{len}").unwrap();
+    }
+
+    Ok(res)
 }
 
 fn parse_range(range: &str) -> Option<(u64, u64)> {

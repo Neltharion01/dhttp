@@ -1,11 +1,11 @@
 //! HTTP/1.1 request parsing/reading
 
-use std::io::{self, ErrorKind, Read, BufReader, BufRead};
-use std::fmt::{self, Write};
-use std::string::FromUtf8Error;
+use std::io::{self, ErrorKind, Read, BufReader, BufRead, Write};
+use std::fmt;
+use std::str::Utf8Error;
 use std::net::{IpAddr, Ipv4Addr};
 
-use crate::reqres::{HttpRequest, HttpResponse, HttpHeader, HttpVersion, HttpMethod, HttpBody};
+use crate::reqres::{HttpRequest, HttpResponse, HttpVersion, HttpMethod, HttpBody};
 use crate::core::connection::{HttpRead, HttpConnection};
 
 fn parse_ver(ver: &str) -> Option<HttpVersion> {
@@ -19,13 +19,6 @@ fn parse_ver(ver: &str) -> Option<HttpVersion> {
     Some(HttpVersion { major, minor })
 }
 
-fn parse_header(header: &str) -> Option<HttpHeader> {
-    let colon = header.find(':')?;
-    let name = header[..colon].to_string();
-    let value = header[colon+1..].trim().to_string();
-    Some(HttpHeader { name, value })
-}
-
 fn split3(line: &str) -> Option<(&str, &str, &str)> {
     let mut split = line.split_whitespace();
     let (method, route, version) = (split.next()?, split.next()?, split.next()?);
@@ -37,28 +30,22 @@ fn split3(line: &str) -> Option<(&str, &str, &str)> {
 }
 
 /// Reads a request from the provided stream
-pub(crate) fn read(conn: impl HttpRead) -> Result<HttpRequest, HttpRequestError> {
-    let mut lines = BufReader::new(conn).lines();
+pub(crate) fn read<'a>(buf: &'a mut Vec<u8>, conn: impl HttpRead) -> Result<HttpRequest<'a>, HttpRequestError> {
+    let mut conn = BufReader::new(conn);
 
-    // get first line
-    let first = lines.next().ok_or(HttpRequestError::EarlyEof)??;
-    // and slice it by 3 components
-    let (method, route, version) = split3(&first).ok_or(HttpRequestError::InvalidPrelude)?;
-    // then parse method, allocate route, parse version
-    let method = HttpMethod::new(method);
-    let route = route.to_string();
-    let version = parse_ver(version).ok_or(HttpRequestError::InvalidVersion)?;
-    // read headers
-    let mut headers = vec![];
-    loop {
-        // will return if connection is shut down without \n\n
-        let line = lines.next().ok_or(HttpRequestError::EarlyEof)??;
-        if line.is_empty() {
-            // empty line = end of request
-            break;
-        }
-        headers.push(parse_header(&line).ok_or(HttpRequestError::InvalidHeader)?);
+    let mut read = 0;
+    while read != 1 && read != 2 { // '\n' or '\r\n'
+        read = conn.read_until(b'\n', buf)?;
+        if read == 0 { return Err(HttpRequestError::EarlyEof); }
     }
+
+    let buf = str::from_utf8(buf)?;
+    let first_line = buf.find("\r\n").ok_or(HttpRequestError::EarlyEof)?;
+
+    let (method, route, version) = split3(&buf[..first_line]).ok_or(HttpRequestError::InvalidPrelude)?;
+    let method = HttpMethod::new(method);
+    let version = parse_ver(version).ok_or(HttpRequestError::InvalidVersion)?;
+    let headers = &buf[first_line+2..];
 
     let addr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
     let mut req = HttpRequest { method, route, version, headers, len: 0, addr };
@@ -71,28 +58,17 @@ pub(crate) fn read(conn: impl HttpRead) -> Result<HttpRequest, HttpRequestError>
 }
 
 /// Send the request
-pub(crate) fn send(req: &HttpRequest, res: HttpResponse, conn: &mut dyn HttpConnection) -> io::Result<()> {
-    let code = res.code;
-    let status = code.as_str();
-    let mut buf = format!("HTTP/1.1 {code} {status}\r\n");
-
-    for header in &res.headers {
-        write!(&mut buf, "{}: {}\r\n", &header.name, &header.value).unwrap();
-    }
-
-    if !res.content_type.is_empty() {
-        write!(&mut buf, "Content-Type: {}\r\n", &res.content_type).unwrap();
-    }
-
+pub(crate) fn send(req: HttpRequest<'_>, mut res: HttpResponse, conn: &mut dyn HttpConnection) -> io::Result<()> {
+    let buf = &mut res.contents;
     match &res.body {
-        HttpBody::Bytes(bytes) => write!(&mut buf, "Content-Length: {}\r\n", bytes.len()).unwrap(),
-        HttpBody::File { len, .. } => write!(&mut buf, "Content-Length: {}\r\n", len).unwrap(),
+        HttpBody::Bytes(bytes) => write!(buf, "Content-Length: {}\r\n", bytes.len()).unwrap(),
+        HttpBody::File { len, .. } => write!(buf, "Content-Length: {}\r\n", len).unwrap(),
         HttpBody::Empty | HttpBody::Upgrade(_) => {},
     };
-    buf.push_str("\r\n");
+    buf.extend(b"\r\n");
 
     // Send headers
-    conn.write_all(buf.as_bytes())?;
+    conn.write_all(&buf)?;
 
     // Don't send body on head requests
     if req.method == HttpMethod::Head { return Ok(()); }
@@ -122,7 +98,7 @@ pub(crate) enum HttpRequestError {
     /// IO error
     Io(io::Error),
     /// Some part of request contained invalid Unicode
-    NotUnicode(FromUtf8Error),
+    NotUnicode(Utf8Error),
     /// Request exceed its size limit
     TooLong,
     /// Request ended too early
@@ -132,7 +108,7 @@ pub(crate) enum HttpRequestError {
     /// Could not parse HTTP version
     InvalidVersion,
     /// Header line did not contain a colon
-    InvalidHeader,
+//    InvalidHeader,
     /// `Content-Length` header did not contain a number
     InvalidLength,
 }
@@ -147,14 +123,14 @@ impl fmt::Display for HttpRequestError {
             // first line of request did not contain exactly 3 elements (method, path and version)
             HttpRequestError::InvalidPrelude => fmt.write_str("invalid prelude"),
             HttpRequestError::InvalidVersion => fmt.write_str("invalid http version"),
-            HttpRequestError::InvalidHeader => fmt.write_str("header without a colon"),
+//            HttpRequestError::InvalidHeader => fmt.write_str("header without a colon"),
             HttpRequestError::InvalidLength => fmt.write_str("content-length header did not contain a number"),
         }
     }
 }
 
-impl From<FromUtf8Error> for HttpRequestError {
-    fn from(err: FromUtf8Error) -> HttpRequestError {
+impl From<Utf8Error> for HttpRequestError {
+    fn from(err: Utf8Error) -> HttpRequestError {
         HttpRequestError::NotUnicode(err)
     }
 }
