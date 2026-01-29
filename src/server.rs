@@ -145,13 +145,11 @@ impl HttpServer {
             // Stop pipelining if:
             // - service didn't consume the body completely
             // - HTTP/1.0 (doesn't support pipelining)
-            // - HTTP/1.1 but client didn't add `Connection: keep-alive`
             if body.conn.limit() != 0 || req.version.is(1, 0) {
                 res.add_header("Connection", "close");
                 connection_close = true;
             } else if req.version.major == 1 {
-                // add keep-alive only if client wants it too
-                if req.cmp_header("Connection", "keep-alive") {
+                if !req.has_header("Connection") || req.cmp_header("Connection", "keep-alive") {
                     res.add_header("Connection", "keep-alive");
                 } else {
                     res.add_header("Connection", "close");
