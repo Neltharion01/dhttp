@@ -17,31 +17,8 @@ pub trait HttpWrite: AsyncWrite + Unpin + Send + Sync {}
 impl<T: AsyncWrite + Unpin + Send + Sync> HttpWrite for T {}
 
 /// Async BufRead/Write stream that represents an HTTP connection
-pub trait HttpConnection: HttpRead + HttpWrite {
-    /// Retrieve client's IP address of this connection
-    fn getpeername(&self) -> io::Result<SocketAddr>;
-    /// Is it HTTPS?
-    fn is_secure(&self) -> bool;
-}
-impl HttpConnection for BufReader<TcpStream> {
-    fn getpeername(&self) -> io::Result<SocketAddr> {
-        self.get_ref().peer_addr()
-    }
-
-    fn is_secure(&self) -> bool {
-        false
-    }
-}
-// rustc why is this not automatic?????
-impl<T: HttpConnection> HttpConnection for &mut T {
-    fn getpeername(&self) -> io::Result<SocketAddr> {
-        (**self).getpeername()
-    }
-
-    fn is_secure(&self) -> bool {
-        (**self).is_secure()
-    }
-}
+pub trait HttpConnection: HttpRead + HttpWrite {}
+impl<T: HttpRead + HttpWrite> HttpConnection for T {}
 
 pub(crate) struct EmitContinue<T: HttpConnection> {
     pub conn: Take<T>,

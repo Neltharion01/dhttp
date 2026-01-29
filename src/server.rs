@@ -61,7 +61,7 @@ impl Default for HttpServer {
 }
 
 impl HttpServer {
-    async fn handle_connection(&self, mut conn: impl HttpConnection) -> io::Result<()> {
+    async fn handle_connection(&self, mut conn: impl HttpConnection, addr: SocketAddr) -> io::Result<()> {
         let mut connection_close = false;
         while !connection_close {
             let req = h1::read((&mut conn).take(self.max_headers_size)).await;
@@ -80,9 +80,7 @@ impl HttpServer {
             let mut req = req.unwrap();
 
             // Address has to be set by the connection handler
-            if let Ok(addr) = conn.getpeername() {
-                req.addr = addr.ip().to_canonical();
-            }
+            req.addr = addr.ip().to_canonical();
 
             // HTTP/2 prior knowledge headers look like `PRI * HTTP/2.0`
             // These connections are not supported
@@ -148,13 +146,11 @@ impl HttpServer {
             // Stop pipelining if:
             // - service didn't consume the body completely
             // - HTTP/1.0 (doesn't support pipelining)
-            // - HTTP/1.1 but client didn't add `Connection: keep-alive`
             if body.conn.limit() != 0 || req.version.is(1, 0) {
                 res.add_header("Connection", "close");
                 connection_close = true;
-            } else if req.version.major == 1 {
-                // add keep-alive only if client wants it too
-                if req.cmp_header("Connection", "keep-alive") {
+            } else if req.version.is(1, 1) {
+                if !req.has_header("Connection") || req.cmp_header("Connection", "keep-alive") {
                     res.add_header("Connection", "keep-alive");
                 } else {
                     res.add_header("Connection", "close");
@@ -202,12 +198,12 @@ pub async fn serve_tcp(addr: &str, server: impl Into<Arc<HttpServer>>) -> io::Re
         if result.is_err() { break; }
 
         match result.unwrap() {
-            Ok((conn, _addr)) => {
+            Ok((conn, addr)) => {
                 err_shown = false;
                 let server2 = Arc::clone(&server);
                 tokio::spawn(async move {
                     // ignore network errors
-                    let _ = server2.handle_connection(BufReader::new(conn)).await;
+                    let _ = server2.handle_connection(BufReader::new(conn), addr).await;
                 });
             }
             Err(e) => {

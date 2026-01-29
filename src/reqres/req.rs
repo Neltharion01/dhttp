@@ -100,6 +100,11 @@ impl HttpRequest {
         header
     }
 
+    /// Checks if this header exists
+    pub fn has_header(&self, name: &str) -> bool {
+        self.get_header(name).is_some()
+    }
+
     /// Compares equality of header values
     pub fn cmp_header(&self, name: &str, value: &str) -> bool {
         let hdr = self.get_header(name);
