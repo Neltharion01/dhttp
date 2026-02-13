@@ -73,7 +73,7 @@ pub(crate) async fn read(conn: impl HttpRead) -> Result<HttpRequest, HttpRequest
 }
 
 /// Send the request
-pub(crate) async fn send(req: &HttpRequest, res: HttpResponse, conn: &mut dyn HttpConnection) -> io::Result<()> {
+pub(crate) async fn send(req: &HttpRequest, res: &mut HttpResponse, conn: &mut dyn HttpConnection) -> io::Result<()> {
     let code = res.code;
     let status = code.as_str();
     let mut buf = format!("HTTP/1.1 {code} {status}\r\n").into_bytes();
@@ -93,26 +93,28 @@ pub(crate) async fn send(req: &HttpRequest, res: HttpResponse, conn: &mut dyn Ht
     };
     buf.extend(b"\r\n");
 
-    if let HttpBody::Bytes(bytes) = &res.body {
+    // Save 1 syscall by merging headers with static body
+    if let HttpBody::Bytes(bytes) = &res.body && req.method != HttpMethod::Head {
         buf.extend(bytes);
     }
 
-    // Send static part
+    // Send headers and static body
     conn.write_all(&buf).await?;
 
     // Don't send body on head requests
     if req.method == HttpMethod::Head { return Ok(()); }
 
     // Now, handle the body
-    match res.body {
-        HttpBody::Empty | HttpBody::Bytes(_) => {},
+    match &mut res.body {
+        HttpBody::Empty => {},
+        HttpBody::Bytes(_) => { /* already sent with headers */ },
         HttpBody::File { file, len } => {
-            tokio::io::copy(&mut file.take(len), conn).await?;
+            tokio::io::copy(&mut file.take(*len), conn).await?;
         }
-        HttpBody::Upgrade(mut handler) => {
+        HttpBody::Upgrade(handler) => {
             handler.upgrade_raw(conn).await?;
             conn.shutdown().await?;
-        }
+        },
     }
 
     Ok(())

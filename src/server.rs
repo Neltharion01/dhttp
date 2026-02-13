@@ -10,7 +10,7 @@ use tokio::net::TcpSocket;
 use socket2::SockRef;
 
 use crate::h1::{self, HttpRequestError};
-use crate::reqres::{HttpRequest, StatusCode};
+use crate::reqres::{HttpRequest, HttpBody, StatusCode};
 use crate::core::{HttpService, HttpServiceRaw, HttpErrorHandler, HttpErrorType, HttpLogger};
 use crate::core::connection::{HttpConnection, EmitContinue};
 use crate::services::{DefaultService, DefaultLogger, ErrorPageHandler};
@@ -71,8 +71,8 @@ impl HttpServer {
                     return Err(err);
                 } else {
                     // Could not parse request, return Bad request
-                    let res = self.error_handler.plain_code(StatusCode::BAD_REQUEST);
-                    h1::send(&HttpRequest::default(), res, &mut conn).await?;
+                    let mut res = self.error_handler.plain_code(StatusCode::BAD_REQUEST);
+                    h1::send(&HttpRequest::default(), &mut res, &mut conn).await?;
                     return conn.shutdown().await;
                 }
             }
@@ -85,8 +85,8 @@ impl HttpServer {
             // HTTP/2 prior knowledge headers look like `PRI * HTTP/2.0`
             // These connections are not supported
             if req.version.major != 1 {
-                let res = self.error_handler.plain_code(StatusCode::HTTP_VERSION_NOT_SUPPORTED);
-                h1::send(&req, res, &mut conn).await?;
+                let mut res = self.error_handler.plain_code(StatusCode::HTTP_VERSION_NOT_SUPPORTED);
+                h1::send(&req, &mut res, &mut conn).await?;
                 return conn.shutdown().await;
             }
 
@@ -159,7 +159,10 @@ impl HttpServer {
             }
 
             // Now, send the response
-            h1::send(&req, res, &mut conn).await?;
+            h1::send(&req, &mut res, &mut conn).await?;
+            if let HttpBody::Upgrade(_) = res.body {
+                connection_close = true;
+            }
         }
         // Loop ended, we close the connection now
         conn.shutdown().await

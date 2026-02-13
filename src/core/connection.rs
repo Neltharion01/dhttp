@@ -1,12 +1,10 @@
 //! Connection types
 
 use std::io::{self, ErrorKind};
-use std::net::SocketAddr;
 use std::pin::Pin;
 use std::task::{Context, Poll, ready};
 
-use tokio::io::{AsyncRead, AsyncBufRead, AsyncWrite, BufReader, ReadBuf, Take};
-use tokio::net::TcpStream;
+use tokio::io::{AsyncRead, AsyncBufRead, AsyncWrite, ReadBuf, Take};
 
 /// Async buffered reader stream
 pub trait HttpRead: AsyncBufRead + Unpin + Send + Sync {}
