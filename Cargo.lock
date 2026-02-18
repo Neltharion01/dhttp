@@ -25,6 +25,7 @@ dependencies = [
  "blake3_lite",
  "chrono_lite",
  "indoc",
+ "parseagent",
  "percent_encoding_lite",
  "pin-project-lite",
  "socket2",
@@ -66,6 +67,11 @@ dependencies = [
  "wasi",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "parseagent"
+version = "0.1.0"
+source = "git+https://github.com/Neltharion01/parseagent#1652438db7170f9e0e1dc0e9477203491fcb5ccd"
 
 [[package]]
 name = "percent_encoding_lite"

@@ -1,5 +1,7 @@
 use std::io;
 
+use parseagent::Guess;
+
 use dhttp::prelude::*;
 use dhttp::reqres::res;
 
@@ -9,11 +11,11 @@ struct MyService {
 
 impl HttpService for MyService {
     async fn request(&self, _route: &str, req: &HttpRequest, _body: &mut dyn HttpRead) -> HttpResult {
-        // Get first segment of the User-Agent
-        let user = req.get_header("User-Agent").and_then(|a| a.split(' ').next()).unwrap_or("stranger");
-        let name = &self.name;
+        // Format the User-Agent
+        let user = req.get_header("User-Agent").unwrap_or_default();
+        let user = Guess::new(user);
 
-        let greeting = format!("{name}: Krif voth ahkrin, {user}!\n");
+        let greeting = format!("Hello {}! Powered by {}\n", user, &self.name);
         Ok(res::text(greeting))
     }
 }

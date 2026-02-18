@@ -18,6 +18,7 @@ socket2 = "0.6"
 chrono_lite = { git = "https://github.com/Neltharion01/chrono_lite" }
 percent_encoding_lite = { git = "https://github.com/Neltharion01/percent_encoding_lite" }
 blake3_lite = { git = "https://github.com/Neltharion01/blake3_lite" }
+parseagent = { git = "https://github.com/Neltharion01/parseagent" }
 
 [dependencies.tokio]
 version = "1.48"

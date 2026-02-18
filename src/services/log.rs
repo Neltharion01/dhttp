@@ -1,4 +1,6 @@
 use chrono_lite::{Tm, time, localtime};
+use parseagent::Guess;
+
 use crate::core::{HttpLogger, HttpError};
 use crate::reqres::{HttpRequest, HttpResponse};
 use crate::util::escape;
@@ -19,9 +21,9 @@ impl DefaultLogger {
         let month = tm_mon + 1;
         let date = format_args!("{tm_hour:02}:{tm_min:02}:{tm_sec:02} {tm_mday:02}-{month:02}-{year}");
 
-        // User-Agents are long, print only first segment
-        let agent = req.get_header("User-Agent").and_then(|a| a.split(' ').next()).unwrap_or("-");
-        let agent = escape::control_sequences(agent);
+        let agent = req.get_header("User-Agent").unwrap_or_default();
+        let agent = Guess::new(agent).to_string();
+        let agent = escape::control_sequences(&agent);
         format!("[{date}] {addr} {agent} {method} {route} -> {code} {desc}")
     }
 }
