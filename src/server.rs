@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use tokio::io::{BufReader, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{BufReader, AsyncReadExt, AsyncWriteExt, AsyncBufReadExt};
 use tokio::net::TcpSocket;
 use socket2::SockRef;
 
@@ -121,17 +121,17 @@ impl HttpServer {
                     // IO error
                     HttpErrorType::Fatal => return conn.shutdown().await,
                     // Status code
-                    HttpErrorType::Hidden => self.error_handler.plain_code(err.status_code()),
+                    HttpErrorType::Status => self.error_handler.plain_code(err.status_code()),
                     // Error with description
-                    HttpErrorType::User => self.error_handler.error(&req, err.as_ref()),
+                    HttpErrorType::Full => self.error_handler.error(&req, err.as_ref()),
                 };
                 // Always use the original status code in the error response (connection handler sets this)
                 handled.code = err.status_code();
                 // Log the error
                 match err.error_type() {
                     HttpErrorType::Fatal => unreachable!(),
-                    HttpErrorType::Hidden => self.logger.log(&req, &handled),
-                    HttpErrorType::User => self.logger.err(&req, &handled, err.as_ref()),
+                    HttpErrorType::Status => self.logger.log(&req, &handled),
+                    HttpErrorType::Full => self.logger.err(&req, &handled, err.as_ref()),
                 };
                 res = Ok(handled);
             }
@@ -163,6 +163,9 @@ impl HttpServer {
             if let HttpBody::Upgrade(_) = res.body {
                 connection_close = true;
             }
+
+            // Check if there is nothing more to read
+            if conn.fill_buf().await?.is_empty() { connection_close = true; }
         }
         // Loop ended, we close the connection now
         conn.shutdown().await

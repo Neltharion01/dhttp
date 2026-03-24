@@ -85,7 +85,7 @@ impl Error for StatusCode {}
 
 impl HttpError for StatusCode {
     fn error_type(&self) -> HttpErrorType {
-        HttpErrorType::Hidden
+        HttpErrorType::Status
     }
 
     fn status_code(&self) -> StatusCode {

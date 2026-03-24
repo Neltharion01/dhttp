@@ -89,7 +89,7 @@ impl fmt::Display for DangerousPathError {
 
 impl Error for DangerousPathError {}
 impl HttpError for DangerousPathError {
-    fn error_type(&self) -> HttpErrorType { HttpErrorType::Hidden }
+    fn error_type(&self) -> HttpErrorType { HttpErrorType::Status }
     fn status_code(&self) -> StatusCode { StatusCode::BAD_REQUEST }
 }
 

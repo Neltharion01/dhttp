@@ -9,35 +9,33 @@ use crate::reqres::StatusCode;
 /// Returned from [`HttpError::error_type`]
 #[derive(Debug, Clone, Copy)]
 pub enum HttpErrorType {
-    /// Terminates the connection (examples: network I/O error)
+    /// Terminates the connection
     Fatal,
-    /// Status code (examples: 404 Not found, 403 Forbidden)
-    Hidden,
-    /// Error with detailed description (could not parse json, wrong file type, etc)
-    User,
+    /// Only status code
+    Status,
+    /// Detailed description
+    Full,
 }
 
-/// Error trait for any service error
-/// # Example implementation
-/// `impl HttpError for MyError {}`
+/// Error trait for any service error. You don't have to override anything to implement it
 pub trait HttpError: Error + Send + 'static {
-    /// Name of this error (type name by default)
+    /// Name of this error, shown in logs
     fn name(&self) -> &'static str {
         // everything after last ::
         std::any::type_name::<Self>().split("::").last().unwrap()
     }
 
-    /// How should this error be handled, check [`HttpErrorType`] for more info (`User` by default)
+    /// How should this error be handled, check [`HttpErrorType`] for more info
     fn error_type(&self) -> HttpErrorType {
-        HttpErrorType::User
+        HttpErrorType::Full
     }
 
-    /// Provides HTTP-friendly description of this error (`.to_string()` by default)
+    /// Provides description suitable to be returned in a HTTP response
     fn http_description(&self) -> String {
         self.to_string()
     }
 
-    /// Which status code should be used for this error
+    /// Which status code should be returned with this error
     fn status_code(&self) -> StatusCode {
         StatusCode::INTERNAL_SERVER_ERROR
     }
@@ -72,7 +70,7 @@ impl HttpError for io::Error {
         if is_net(self.kind()) {
             HttpErrorType::Fatal
         } else {
-            HttpErrorType::User
+            HttpErrorType::Full
         }
     }
 
@@ -94,12 +92,5 @@ impl HttpError for io::Error {
 }
 
 impl HttpError for Infallible {}
-
-impl HttpError for tokio::task::JoinError {
-    fn error_type(&self) -> HttpErrorType {
-        // This is a panic message, should not be displayed
-        HttpErrorType::Hidden
-    }
-}
-
+impl HttpError for tokio::task::JoinError {}
 impl HttpError for std::string::FromUtf8Error {}

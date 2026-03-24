@@ -29,8 +29,6 @@ pub trait HttpService: Send + Sync + 'static {
 
 /// Dyn version of [`HttpService`]
 ///
-/// The raw version is required to overcome the ugliness of dyn Future signatures
-///
 /// Use it to call the service, and use [`HttpService`] to implement it.
 pub trait HttpServiceRaw: Send + Sync + 'static {
     /// Serve the request (dyn version)
