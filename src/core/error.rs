@@ -1,0 +1,96 @@
+use std::convert::Infallible;
+use std::io::{self, ErrorKind};
+use std::error::Error;
+
+use crate::reqres::StatusCode;
+
+/// How should this error be handled
+///
+/// Returned from [`HttpError::error_type`]
+#[derive(Debug, Clone, Copy)]
+pub enum HttpErrorType {
+    /// Terminates the connection
+    Fatal,
+    /// Only status code
+    Status,
+    /// Detailed description
+    Full,
+}
+
+/// Error trait for any service error. You don't have to override anything to implement it
+pub trait HttpError: Error + Send + 'static {
+    /// Name of this error, shown in logs
+    fn name(&self) -> &'static str {
+        // everything after last ::
+        std::any::type_name::<Self>().split("::").last().unwrap()
+    }
+
+    /// How should this error be handled, check [`HttpErrorType`] for more info
+    fn error_type(&self) -> HttpErrorType {
+        HttpErrorType::Full
+    }
+
+    /// Provides description suitable to be returned in a HTTP response
+    fn http_description(&self) -> String {
+        self.to_string()
+    }
+
+    /// Which status code should be returned with this error
+    fn status_code(&self) -> StatusCode {
+        StatusCode::INTERNAL_SERVER_ERROR
+    }
+}
+
+impl<E: HttpError> From<E> for Box<dyn HttpError> {
+    fn from(value: E) -> Box<dyn HttpError> {
+        Box::new(value)
+    }
+}
+
+fn is_net(kind: ErrorKind) -> bool {
+    matches!(kind, ErrorKind::ConnectionRefused
+    | ErrorKind::ConnectionReset
+    | ErrorKind::HostUnreachable
+    | ErrorKind::NetworkUnreachable
+    | ErrorKind::ConnectionAborted
+    | ErrorKind::NotConnected
+    | ErrorKind::AddrInUse
+    | ErrorKind::AddrNotAvailable
+    | ErrorKind::NetworkDown
+    | ErrorKind::BrokenPipe
+    | ErrorKind::TimedOut)
+}
+
+impl HttpError for io::Error {
+    fn name(&self) -> &'static str {
+        "io::Error"
+    }
+
+    fn error_type(&self) -> HttpErrorType {
+        if is_net(self.kind()) {
+            HttpErrorType::Fatal
+        } else {
+            HttpErrorType::Full
+        }
+    }
+
+    fn http_description(&self) -> String {
+        match self.kind() {
+            ErrorKind::NotFound | ErrorKind::NotADirectory => "The requested resource was not found on this server".to_string(),
+            ErrorKind::PermissionDenied => "Access denied".to_string(),
+            _ => self.to_string(),
+        }
+    }
+
+    fn status_code(&self) -> StatusCode {
+        match self.kind() {
+            ErrorKind::NotFound | ErrorKind::NotADirectory => StatusCode::NOT_FOUND,
+            ErrorKind::PermissionDenied => StatusCode::FORBIDDEN,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
+
+impl HttpError for Infallible {}
+impl HttpError for tokio::task::JoinError {}
+impl HttpError for std::string::FromUtf8Error {}
