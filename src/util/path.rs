@@ -32,6 +32,9 @@ pub fn sanitize(route: &str) -> Result<PathBuf, DangerousPathError> {
     not_implemented
 }
 
+// TODO: preceding / can be removed without allocation
+// Another TODO: paths without preceding / should return bad request
+
 // unfortunately we need separate functions for windows/unix because windows one uses &str
 #[cfg(any(unix, test))]
 fn sanitize_unix(route: &[u8]) -> Result<PathBuf, DangerousPathError> {
@@ -48,13 +51,17 @@ fn sanitize_unix(route: &[u8]) -> Result<PathBuf, DangerousPathError> {
     Ok(out)
 }
 
+// Reason to filter out even safe characters?
+// Invalid paths throw I/O error on open, this will allow to differentiate between Linux/Windows hosts. This is not a very good thing
 #[cfg(any(windows, test))]
 fn sanitize_win(route: &str) -> Result<PathBuf, DangerousPathError> {
     if route.contains(|c| c < ' ') { return Err(DangerousPathError::InvalidCharacters); }
-    // windows invalid characters except path separators '/' '\\'
-    // out of all these ':' is most important because it rejects drive letters
+
     const INVALID_CHARS: &[char] = &['<', '>', ':', '"', '|', '?', '*'];
     if route.contains(INVALID_CHARS) { return Err(DangerousPathError::InvalidCharacters); }
+
+    // This thing should also filter con, nul{,.txt}, prn, aux, lpt[1-9¹-³], com[1-9¹-3]
+    // They throw an I/O error on fs::metadata call or open something undesired on File::open
 
     let mut out = PathBuf::new();
     for segment in route.split(['/', '\\']) {
@@ -70,9 +77,9 @@ fn sanitize_win(route: &str) -> Result<PathBuf, DangerousPathError> {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum DangerousPathError {
-    /// Path contains dangerous segments (`..` and drive letters on Windows)
+    /// Path contains dangerous segments (`..`)
     DangerousPath,
-    /// Path was either invalid UTF-8 (only on Windows), file name or contained forbidden characters:
+    /// Path was either invalid UTF-8 (only on Windows), or contained forbidden characters:
     /// - `\0` on unix
     /// - 0-31 and `<>:"/\|?*` on Windows
     InvalidCharacters,
@@ -90,7 +97,7 @@ impl fmt::Display for DangerousPathError {
 impl Error for DangerousPathError {}
 impl HttpError for DangerousPathError {
     fn error_type(&self) -> HttpErrorType { HttpErrorType::Status }
-    fn status_code(&self) -> StatusCode { StatusCode::BAD_REQUEST }
+    fn status_code(&self) -> StatusCode { StatusCode::NOT_FOUND }
 }
 
 /// Performs URL encoding for a given [`Path`] (lossy on Windows)
@@ -111,6 +118,8 @@ mod tests {
     #[test]
     fn win() {
         assert_eq!(sanitize_win("/.."), Err(DangerousPath));
+        assert_eq!(sanitize_win("/..\\file.txt"), Err(DangerousPath));
+        assert_eq!(sanitize_win("/\\../file.txt"), Err(DangerousPath));
         assert_eq!(sanitize_win("/\\..\\"), Err(DangerousPath));
         assert_eq!(sanitize_win("Dir\\.."), Err(DangerousPath));
         assert_eq!(sanitize_win("/C:/Windows"), Err(InvalidCharacters));
