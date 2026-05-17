@@ -9,6 +9,8 @@ pub use body::{HttpBody, HttpUpgrade};
 
 pub mod res;
 pub use res::HttpResponse;
+mod url;
+pub use url::Url;
 
 pub mod sse;
 

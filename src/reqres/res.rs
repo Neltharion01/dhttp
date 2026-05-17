@@ -1,9 +1,8 @@
 //! HTTP response and its constructors
 
 use blake3_lite::Hasher;
-use percent_encoding_lite::{is_encoded, encode, Bitmask};
 
-use crate::reqres::{HttpRequest, HttpHeader, HttpBody, StatusCode};
+use crate::reqres::{HttpRequest, HttpHeader, HttpBody, StatusCode, Url};
 use crate::reqres::sse::HttpSse;
 
 /// Your response
@@ -63,7 +62,7 @@ pub fn html(req: &HttpRequest, html: impl Into<String>) -> HttpResponse {
 
     let mut hasher = Hasher::new();
     hasher.update(html.as_bytes());
-    // You'd probably execute me for that but I see no security flaws to truncate Blake3 for caching purposes
+    // Default length is 32, we are truncating it
     let mut hash = [0; 8];
     hasher.finalize(&mut hash);
     let hex = format!("\"{}\"", crate::util::hex(&hash));
@@ -83,16 +82,11 @@ pub fn json(json: impl Into<String>) -> HttpResponse {
 }
 
 /// HTTP redirect with the `Location` header
-pub fn redirect(dest: impl Into<String>) -> HttpResponse {
-    let mut dest = dest.into();
-    // To avoid XSS for URLs containing a double quote or back slash
-    if !is_encoded(&dest, Bitmask::URI) {
-        dest = encode(dest, Bitmask::URI);
-    }
+pub fn redirect(dest: Url) -> HttpResponse {
     HttpResponse {
         code: StatusCode::MOVED_PERMANENTLY,
-        headers: vec![HttpHeader { name: "Location".to_string(), value: dest.clone() }],
-        body: format!("<a href=\"{dest}\">Click here if you weren't redirected</a>\n").into(),
+        body: format!("<a href=\"{}\">Click here if you weren't redirected</a>\n", dest.get()).into(),
+        headers: vec![HttpHeader { name: "Location".to_string(), value: dest.0 }],
         content_type: "text/html; charset=utf-8".to_string(),
     }
 }
