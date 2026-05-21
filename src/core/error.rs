@@ -10,7 +10,7 @@ use crate::reqres::StatusCode;
 #[derive(Debug, Clone, Copy)]
 pub enum HttpErrorType {
     /// Terminates the connection
-    Fatal,
+    Terminate,
     /// Only status code
     Status,
     /// Detailed description
@@ -68,7 +68,7 @@ impl HttpError for io::Error {
 
     fn error_type(&self) -> HttpErrorType {
         if is_net(self.kind()) {
-            HttpErrorType::Fatal
+            HttpErrorType::Terminate
         } else {
             HttpErrorType::Full
         }

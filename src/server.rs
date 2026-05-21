@@ -19,6 +19,7 @@ use crate::util::future::Or;
 const DEFAULT_MAX_HEADERS_SIZE: u64 = 65536; // 64KB
 
 /// An HTTP/1.1 server
+#[non_exhaustive]
 pub struct HttpServer {
     pub name: String,
     pub max_headers_size: u64,
@@ -119,7 +120,7 @@ impl HttpServer {
                 // Response is Err, should be handled with defined error handler
                 let mut handled = match err.error_type() {
                     // IO error
-                    HttpErrorType::Fatal => return conn.shutdown().await,
+                    HttpErrorType::Terminate => return conn.shutdown().await,
                     // Status code
                     HttpErrorType::Status => self.error_handler.plain_code(err.status_code()),
                     // Error with description
@@ -129,7 +130,7 @@ impl HttpServer {
                 handled.code = err.status_code();
                 // Log the error
                 match err.error_type() {
-                    HttpErrorType::Fatal => unreachable!(),
+                    HttpErrorType::Terminate => unreachable!(),
                     HttpErrorType::Status => self.logger.log(&req, &handled),
                     HttpErrorType::Full => self.logger.err(&req, &handled, err.as_ref()),
                 };
