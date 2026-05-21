@@ -10,7 +10,7 @@ use crate::util::path;
 
 /// Hosts a directory with static files
 pub struct FilesService {
-    pub path: PathBuf,
+    path: PathBuf,
 }
 
 impl FilesService {
