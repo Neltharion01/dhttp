@@ -20,14 +20,6 @@ impl HttpService for FileServer {
             Ok(res::file(req, &path).await?)
         }
     }
-
-    fn filter(&self, _route: &str, req: &HttpRequest) -> HttpResult<()> {
-        if req.method != HttpMethod::Get && req.method != HttpMethod::Head {
-            return Err(StatusCode::METHOD_NOT_ALLOWED.into());
-        }
-        if req.len > 0 { return Err(StatusCode::REQUEST_ENTITY_TOO_LARGE.into()); }
-        Ok(())
-    }
 }
 
 async fn list_dir(route: &str, path: &Path) -> io::Result<String> {

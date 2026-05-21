@@ -18,10 +18,9 @@ pub trait HttpService: Send + Sync + 'static {
 
     /// Checks if request is valid
     ///
-    /// By default, it checks that route is `"/"`, method is [`HttpMethod::Get`] and `req.len` is 0
-    fn filter(&self, route: &str, req: &HttpRequest) -> HttpResult<()> {
-        if route != "/" { return Err(StatusCode::NOT_FOUND.into()); }
-        if req.method != HttpMethod::Get { return Err(StatusCode::METHOD_NOT_ALLOWED.into()); }
+    /// By default, it checks that method is [`HttpMethod::Get`] and `req.len` is 0
+    fn filter(&self, _route: &str, req: &HttpRequest) -> HttpResult<()> {
+        if req.method != HttpMethod::Get && req.method != HttpMethod::Head { return Err(StatusCode::METHOD_NOT_ALLOWED.into()); }
         if req.len > 0 { return Err(StatusCode::REQUEST_ENTITY_TOO_LARGE.into()); }
         Ok(())
     }

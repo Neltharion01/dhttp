@@ -89,7 +89,7 @@ pub(crate) async fn send(req: &HttpRequest, res: &mut HttpResponse, conn: &mut d
     match &res.body {
         HttpBody::Bytes(bytes) => write!(&mut buf, "Content-Length: {}\r\n", bytes.len()).unwrap(),
         HttpBody::File { len, .. } => write!(&mut buf, "Content-Length: {}\r\n", len).unwrap(),
-        HttpBody::Empty | HttpBody::Upgrade(_) => {},
+        HttpBody::Empty | HttpBody::Sse(_) => {},
     };
     buf.extend(b"\r\n");
 
@@ -111,8 +111,10 @@ pub(crate) async fn send(req: &HttpRequest, res: &mut HttpResponse, conn: &mut d
         HttpBody::File { file, len } => {
             tokio::io::copy(&mut file.take(*len), conn).await?;
         }
-        HttpBody::Upgrade(handler) => {
-            handler.upgrade_raw(conn).await?;
+        HttpBody::Sse(handler) => {
+            while let Some(event) = handler.next_raw().await {
+                conn.write_all(event.0.as_bytes()).await?;
+            }
             conn.shutdown().await?;
         },
     }

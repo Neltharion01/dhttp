@@ -7,7 +7,7 @@ use crate::reqres::{HttpRequest, StatusCode};
 ///
 /// For example:
 /// ```
-/// # use dhttp::services::{DefaultService, Router};
+/// # use dhttp::service::{DefaultService, Router};
 /// # use dhttp::reqres::HttpMethod;
 /// let mut router = Router::new();
 /// router.add("/hello", DefaultService);
@@ -15,24 +15,30 @@ use crate::reqres::{HttpRequest, StatusCode};
 /// This will show the hello message on this route, and fire a 404 on others.
 ///
 /// Routes can be of two types:
-/// - exact (does not end with `/`)
-/// - nested (ends with `/`)
+/// - exact (does not end with `/*`)
+/// - nested (ends with `/*`)
 ///
 /// Exact route is a hashmap match, nested route matches anything under chosen route.
 ///
 /// Nested route example:
 /// ```
-/// # use dhttp::services::{Router, FilesService};
+/// # use dhttp::service::{Router, Files};
 /// # let mut router = Router::new();
-/// router.add("/files/", FilesService::new("files"));
+/// router.add("/files/*", Files::new("files"));
+/// # /* Without this comment, code highlighting in nano is broken */
 /// ```
 /// This code will host all files in the "files" dir, under route `/files/`.
-/// Note that it also matches just `/files`, and that nested routes strip their prefix -
-/// so `/files/something` becomes `/something` in the `route` argument. Original route is still
-/// accessible via `req.route`
+/// Note that it DOES NOT match `/files`, so you usually want to add something like:
+/// ```
+/// # use dhttp::service::{Router, Redirect};
+/// # let mut router = Router::new();
+/// router.add("/files", Redirect::new("/files/"));
+/// ```
+///
+/// Also, nested routes strip their prefix - so `/files/something` becomes `/something` in the `route` argument. Original route is still accessible via `req.route`
 ///
 /// Nested routes are implemented with a linear search, consider something more optimized
-/// if you have thousands of them
+/// if you have thousands of them (like a HashMap)
 ///
 /// # Errors
 /// When a route cannot be matched, [`Router`] fires a `StatusCode(404)`
@@ -53,8 +59,8 @@ impl Router {
     /// Adds a new route
     pub fn add(&mut self, route: &str, service: impl HttpServiceRaw) -> &mut Self {
         let mut route = route.to_string();
-        if route.ends_with("/") {
-            route.pop();
+        if route.ends_with("/*") { // */
+            route.pop(); route.pop();
             self.nested.push((route, Box::new(service)));
         } else {
             self.exact.insert(route, Box::new(service));
@@ -75,11 +81,8 @@ impl Router {
         for (r, service) in &self.nested {
             // compare prefix...
             if let Some(route) = route.strip_prefix(r) {
-                // if nothing left, it matched fully...
-                if route.is_empty() {
-                    return Some(("/", &**service));
                 // if leftover starts with /, then it matched a subsegment...
-                } else if route.starts_with("/") {
+                if route.starts_with("/") {
                     return Some((route, &**service));
                 }
                 // otherwise, it didn't match anything (think of /files vs /files123)

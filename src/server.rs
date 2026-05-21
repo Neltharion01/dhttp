@@ -13,7 +13,7 @@ use crate::h1::{self, HttpRequestError};
 use crate::reqres::{HttpRequest, HttpBody, StatusCode};
 use crate::core::{HttpService, HttpServiceRaw, HttpErrorHandler, HttpErrorType, HttpLogger};
 use crate::core::connection::{HttpConnection, EmitContinue};
-use crate::services::{DefaultService, DefaultLogger, ErrorPageHandler};
+use crate::service::{DefaultService, DefaultLogger, ErrorPageHandler};
 use crate::util::future::Or;
 
 const DEFAULT_MAX_HEADERS_SIZE: u64 = 65536; // 64KB
@@ -161,7 +161,7 @@ impl HttpServer {
 
             // Now, send the response
             h1::send(&req, &mut res, &mut conn).await?;
-            if let HttpBody::Upgrade(_) = res.body {
+            if let HttpBody::Sse(_) = res.body {
                 connection_close = true;
             }
 

@@ -4,7 +4,7 @@ pub(crate) mod h1;
 
 pub mod reqres;
 pub mod core;
-pub mod services;
+pub mod service;
 pub mod prelude;
 pub mod server;
 pub mod util;

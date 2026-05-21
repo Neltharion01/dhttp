@@ -22,18 +22,13 @@
 //! ```
 
 use std::fmt::Write;
-use std::io;
+use std::pin::Pin;
 
-use tokio::io::AsyncWriteExt;
-
-use crate::core::connection::HttpConnection;
-use crate::reqres::HttpUpgrade;
-
-pub struct HttpSseEvent(String);
+pub struct HttpSseEvent(pub(crate) String);
 
 fn add_data(event: &mut String, data: &str) {
     for line in data.split('\n') {
-        write!(event, "data: {}", line).unwrap();
+        writeln!(event, "data: {}", line).unwrap();
     }
     event.push('\n');
 }
@@ -60,15 +55,19 @@ impl HttpSseEvent {
 #[doc(alias = "EventSource")]
 pub trait HttpSse: Send + 'static {
     /// Produces a new event or `None` if there are no more events
+    ///
+    /// Equivalent signature: `async fn next(&mut self) -> Option<HttpSseEvent>`
     fn next(&mut self) -> impl Future<Output = Option<HttpSseEvent>> + Send;
 }
 
-impl<T: HttpSse> HttpUpgrade for T {
-    async fn upgrade(&mut self, conn: &mut dyn HttpConnection) -> io::Result<()> {
-        while let Some(event) = self.next().await {
-            conn.write_all(event.0.as_bytes()).await?;
-        }
+/// Dyn version of [`HttpSse`]
+pub trait HttpSseRaw: Send {
+    /// Dyn version of `next`
+    fn next_raw<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Option<HttpSseEvent>> + Send + 'a>>;
+}
 
-        Ok(())
+impl<T: HttpSse> HttpSseRaw for T {
+    fn next_raw<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = Option<HttpSseEvent>> + Send + 'a>> {
+        Box::pin(self.next())
     }
 }

@@ -2,7 +2,7 @@ use std::io;
 
 use dhttp::prelude::*;
 use dhttp::reqres::res;
-use dhttp::services::{Router, FilesService};
+use dhttp::service::{Router, Files};
 
 struct StatusService;
 impl HttpService for StatusService {
@@ -39,7 +39,7 @@ async fn http_main() -> io::Result<()> {
     let mut router = Router::new();
     router
         .add("/status", StatusService)
-        .add("/files/", FilesService::new("examples"));
+        .add("/files/*", Files::new("examples")); // */
     server.service(router);
     server.error_handler(JsonErrorHandler);
 

@@ -92,7 +92,7 @@ pub fn redirect(dest: Url) -> HttpResponse {
 }
 
 pub fn sse(handler: impl HttpSse) -> HttpResponse {
-    HttpResponse::with_type("text/event-stream", HttpBody::Upgrade(Box::new(handler)))
+    HttpResponse::with_type("text/event-stream", HttpBody::Sse(Box::new(handler)))
 }
 
 pub use super::file::file;

@@ -5,7 +5,9 @@ pub use defaultservice::DefaultService;
 mod router;
 pub use router::Router;
 mod files;
-pub use files::FilesService;
+pub use files::Files;
+mod redirect;
+pub use redirect::Redirect;
 
 mod log;
 pub use log::DefaultLogger;
