@@ -21,7 +21,7 @@ blake3_lite = { git = "https://github.com/Neltharion01/blake3_lite" }
 parseagent = { git = "https://github.com/Neltharion01/parseagent" }
 
 [dependencies.tokio]
-version = "1.48"
+version = "1.52"
 features = ["rt-multi-thread", "fs", "net", "io-util", "time", "signal"]
 
 [dev-dependencies]
