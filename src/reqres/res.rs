@@ -2,7 +2,7 @@
 
 use blake3_lite::Hasher;
 
-use crate::reqres::{HttpRequest, HttpHeader, HttpBody, StatusCode, Url};
+use crate::reqres::{HttpRequest, HttpHeader, HttpBody, StatusCode};
 use crate::reqres::sse::HttpSse;
 
 /// Your response
@@ -82,11 +82,12 @@ pub fn json(json: impl Into<String>) -> HttpResponse {
 }
 
 /// HTTP redirect with the `Location` header
-pub fn redirect(dest: Url) -> HttpResponse {
+pub fn redirect(dest: impl Into<String>) -> HttpResponse {
+    let dest = dest.into();
     HttpResponse {
         code: StatusCode::MOVED_PERMANENTLY,
-        body: format!("<a href=\"{}\">Click here if you weren't redirected</a>\n", dest.get()).into(),
-        headers: vec![HttpHeader { name: "Location".to_string(), value: dest.0 }],
+        body: format!("<a href=\"{}\">Click here if you weren't redirected</a>\n", &dest).into(),
+        headers: vec![HttpHeader { name: "Location".to_string(), value: dest }],
         content_type: "text/html; charset=utf-8".to_string(),
     }
 }

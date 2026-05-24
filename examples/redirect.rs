@@ -1,15 +1,13 @@
 use std::io;
 
 use dhttp::prelude::*;
-use dhttp::reqres::{Url, res};
+use dhttp::reqres::res;
 
-struct Redirect {
-    dest: Url,
-}
+struct Redirect(&'static str);
 
 impl HttpService for Redirect {
     async fn request(&self, _route: &str, _req: &HttpRequest, _body: &mut dyn HttpRead) -> HttpResult {
-        Ok(res::redirect(self.dest.clone()))
+        Ok(res::redirect(self.0))
     }
 }
 
@@ -19,8 +17,7 @@ fn main() -> io::Result<()> {
 
 async fn http_main() -> io::Result<()> {
     let mut server = HttpServer::new();
-    let dest = Url::new("https://google.com").unwrap();
-    server.service(Redirect { dest });
+    server.service(Redirect("https://google.com"));
 
     dhttp::serve_tcp("[::]:8080", server).await
 }
