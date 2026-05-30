@@ -103,7 +103,7 @@ impl HttpError for DangerousPathError {
 /// Performs URL encoding for a given [`Path`] (lossy on Windows)
 pub fn encode(path: &Path) -> String {
     #[cfg(windows)]
-    return percent_encoding_lite::encode(&path.to_string_lossy(), Bitmask::PATH);
+    return percent_encoding_lite::encode(path.to_string_lossy().as_ref(), Bitmask::PATH);
     #[cfg(unix)]
     return percent_encoding_lite::encode(path.as_os_str().as_bytes(), Bitmask::PATH);
     #[cfg(not(any(windows, unix)))]
